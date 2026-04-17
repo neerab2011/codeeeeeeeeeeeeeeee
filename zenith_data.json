@@ -1,0 +1,193 @@
+{
+  "total_xp": 2800,
+  "level_name": "Focused",
+  "detox_streak": 14,
+  "wellness_score": 91,
+  "score_level": "Excellent",
+  "score_history": [
+    100,
+    100,
+    100,
+    100,
+    100,
+    100,
+    100
+  ],
+  "focus_sessions_today": 5,
+  "challenges_completed": 16,
+  "breathing_sessions": 3,
+  "screen_time_today": 1.2,
+  "mindfulness_minutes": 45,
+  "sleep_hours": 7.2,
+  "water_glasses": 12,
+  "unread_notifications": 3,
+  "achievements_unlocked": [
+    "streak_7",
+    "mood_log",
+    "mindful_30",
+    "challenge_3",
+    "focus_5",
+    "hydrated",
+    "sleep_champ",
+    "first_breath"
+  ],
+  "goals": {
+    "screen_time": 3.0,
+    "focus_mins": 90,
+    "sleep": 8.0,
+    "water": 8
+  },
+  "habits": [
+    {
+      "id": "meditation",
+      "name": "Morning Meditation",
+      "icon": "🧘",
+      "done": false,
+      "streak": 5
+    },
+    {
+      "id": "exercise",
+      "name": "30-min Exercise",
+      "icon": "🏃",
+      "done": false,
+      "streak": 3
+    },
+    {
+      "id": "reading",
+      "name": "Read 20 Pages",
+      "icon": "📖",
+      "done": true,
+      "streak": 12
+    },
+    {
+      "id": "no_social",
+      "name": "No Social Media",
+      "icon": "📵",
+      "done": false,
+      "streak": 2
+    },
+    {
+      "id": "gratitude",
+      "name": "Gratitude Log",
+      "icon": "🙏",
+      "done": true,
+      "streak": 7
+    }
+  ],
+  "journal_entries": [],
+  "mood_log": [],
+  "goal_screen_time": 3.0,
+  "goal_focus_mins": 90,
+  "goal_sleep": 8.0,
+  "goal_water": 8,
+  "journal": [],
+  "notifications": [
+    {
+      "icon": "🔥",
+      "text": "You're on a 7-day streak! Keep it up.",
+      "time": "2m ago",
+      "unread": true
+    },
+    {
+      "icon": "💧",
+      "text": "Time to hydrate! You haven't logged water.",
+      "time": "18m ago",
+      "unread": true
+    },
+    {
+      "icon": "🧘",
+      "text": "Breathing session reminder — 5 min break.",
+      "time": "1h ago",
+      "unread": true
+    },
+    {
+      "icon": "🎯",
+      "text": "Focus session completed — great work!",
+      "time": "3h ago",
+      "unread": false
+    },
+    {
+      "icon": "🏆",
+      "text": "Challenge unlocked: 'Social Detox Warrior'",
+      "time": "Yesterday",
+      "unread": false
+    }
+  ],
+  "yoga_sessions": 0,
+  "hydration_log": [
+    {
+      "time": "13:24",
+      "amount": 250
+    },
+    {
+      "time": "13:24",
+      "amount": 250
+    },
+    {
+      "time": "13:24",
+      "amount": 250
+    },
+    {
+      "time": "13:24",
+      "amount": 250
+    },
+    {
+      "time": "13:24",
+      "amount": 250
+    },
+    {
+      "time": "13:24",
+      "amount": 250
+    },
+    {
+      "time": "13:24",
+      "amount": 250
+    },
+    {
+      "time": "13:24",
+      "amount": 250
+    },
+    {
+      "time": "13:24",
+      "amount": 250
+    },
+    {
+      "time": "13:24",
+      "amount": 250
+    },
+    {
+      "time": "13:24",
+      "amount": 250
+    },
+    {
+      "time": "13:24",
+      "amount": 250
+    },
+    {
+      "time": "13:24",
+      "amount": 250
+    },
+    {
+      "time": "13:24",
+      "amount": 250
+    },
+    {
+      "time": "13:24",
+      "amount": 250
+    },
+    {
+      "time": "13:24",
+      "amount": 250
+    },
+    {
+      "time": "13:24",
+      "amount": 250
+    },
+    {
+      "time": "13:24",
+      "amount": 250
+    }
+  ],
+  "user_name": "Ryan Sharma",
+  "profile_type": "ryan"
+}
