@@ -4,7 +4,7 @@ Zenith — Smart Detox & Digital Wellness
 Single-file Python/Flask application
 """
 
-import json, os, random, threading, time, webbrowser
+import json, os, random, threading, time, webbrowser, requests
 from datetime import datetime, timedelta
 from flask import Flask, jsonify, request, Response
 
@@ -418,6 +418,51 @@ def api_yoga_done():
     data = check_achievements(data)
     save_data(data)
     return jsonify({"ok": True, "yoga_sessions": data["yoga_sessions"]})
+
+@app.route("/api/ai_coach", methods=["POST"])
+def api_ai_coach():
+    req = request.get_json()
+    user_msg = req.get("message", "")
+    mode = req.get("mode", "chat") # 'chat' or 'analysis'
+    
+    data = load_data()
+    api_key = os.environ.get("GROK_API_KEY")
+    
+    if not api_key:
+        # Simulation if no API key provided
+        if mode == "analysis":
+            return jsonify({"reply": f"Based on your current activity, {data.get('user_name', 'User')}, your wellness score is {data.get('wellness_score', 85)}. You've spent {data.get('screen_time_today', 0)}h on screens today. I recommend a 10-minute meditation session to offset digital fatigue."})
+        else:
+            return jsonify({"reply": "I'm currently in offline mode. Please configure your GROK_API_KEY to enable live AI coaching, but I can still tell you that your focus sessions are looking great!"})
+
+    # Grok API Integration
+    try:
+        system_prompt = f"You are Zenith AI, a premium digital wellness coach. User Data: {json.dumps(data)}. "
+        if mode == "analysis":
+            system_prompt += "Provide a clinical yet motivating analysis of their current wellness metrics."
+        else:
+            system_prompt += "Be a friendly, encouraging coach. Keep responses concise and focused on digital detox."
+
+        response = requests.post(
+            "https://api.x.ai/v1/chat/completions",
+            headers={
+                "Authorization": f"Bearer {api_key}",
+                "Content-Type": "application/json"
+            },
+            json={
+                "model": "grok-beta",
+                "messages": [
+                    {"role": "system", "content": system_prompt},
+                    {"role": "user", "content": user_msg if user_msg else "Analyze my current status."}
+                ]
+            },
+            timeout=10
+        )
+        res_data = response.json()
+        reply = res_data['choices'][0]['message']['content']
+        return jsonify({"reply": reply})
+    except Exception as e:
+        return jsonify({"reply": f"Error connecting to Grok: {str(e)}"}), 500
 
 @app.route("/api/hydration_log")
 def api_hydration_log():
@@ -863,6 +908,8 @@ textarea.j-input:focus{border-color:var(--b3);background:rgba(255,255,255,.07)}
 <style>
 .login-btn:hover { background: #e0e0e0; transform: translateY(-2px); box-shadow: 0 0 25px rgba(255,255,255,0.5); }
 .login-btn:active { transform: translateY(0); }
+  .chat-u { align-self: flex-end; background: var(--a); color: #fff; padding: 10px 14px; border-radius: 14px 14px 0 14px; font-size: 13.5px; box-shadow: 0 4px 15px rgba(124,109,255,0.2); }
+  .chat-a { align-self: flex-start; background: rgba(255,255,255,0.08); border: 1px solid var(--b1); padding: 10px 14px; border-radius: 14px 14px 14px 0; font-size: 13.5px; color: #eee; }
 </style>
 
 <!-- APP -->
@@ -896,6 +943,7 @@ textarea.j-input:focus{border-color:var(--b3);background:rgba(255,255,255,.07)}
       <button class="nb" data-tab="tab-yoga" onclick="navTo(this)"><span class="nb-ic">🧘</span><span>Yoga</span></button>
       <button class="nb" data-tab="tab-hydration" onclick="navTo(this)"><span class="nb-ic">💧</span><span>Hydration</span></button>
       <button class="nb" data-tab="tab-progress" onclick="navTo(this)"><span class="nb-ic">🏆</span><span>Journey</span></button>
+      <button class="nb" data-tab="tab-ai" onclick="navTo(this)"><span class="nb-ic">🤖</span><span>AI Coach</span></button>
     </div>
   </nav>
 
@@ -1272,6 +1320,28 @@ textarea.j-input:focus{border-color:var(--b3);background:rgba(255,255,255,.07)}
       </div>
     </div>
 
+    <!-- AI COACH -->
+    <div class="tab-content" id="tab-ai">
+      <div class="bento">
+        <div class="card g c8">
+          <div class="lbl"><span>🤖</span> Zenith AI Coach <span style="margin-left:auto;font-size:11px;color:var(--mu)">Powered by Grok</span></div>
+          <div id="aiChat" style="height:400px;overflow-y:auto;padding:10px;display:flex;flex-direction:column;gap:12px;margin-bottom:15px;background:rgba(0,0,0,0.2);border-radius:12px">
+            <div style="background:rgba(255,255,255,0.05);padding:10px 14px;border-radius:12px;max-width:85%;align-self:flex-start;font-size:13.5px">Hello! I'm your Zenith AI Coach. Ready for a digital detox analysis?</div>
+          </div>
+          <div style="display:flex;gap:10px">
+            <input type="text" id="aiInp" placeholder="Ask your coach anything..." style="flex:1;background:rgba(255,255,255,0.05);border:1px solid var(--b1);padding:12px 16px;border-radius:10px;color:#fff;font-size:14px" onkeyup="if(event.key==='Enter')askAI()">
+            <button class="btn btn-p" onclick="askAI()">Send</button>
+          </div>
+        </div>
+        <div class="card g c4">
+          <div class="lbl"><span>🧠</span> AI Analysis</div>
+          <p style="font-size:13px;color:var(--mu);line-height:1.6;margin-bottom:15px">Get a comprehensive clinical analysis of your wellness metrics from the last 24 hours.</p>
+          <button class="btn btn-g" style="width:100%" onclick="analyzeAI()">Run Analysis</button>
+          <div id="anaRes" style="margin-top:20px;font-size:13px;color:#fff;line-height:1.5;padding:12px;border-left:2px solid var(--a);background:rgba(124,109,255,0.05);display:none"></div>
+        </div>
+      </div>
+    </div>
+
   </main>
 </div>
 
@@ -1283,7 +1353,7 @@ const TAB_TITLES = {
   'tab-home':'Home Dashboard','tab-focus':'Focus & Breathe',
   'tab-insights':'Insights','tab-life':'Life & Habits',
   'tab-yoga':'Yoga & Movement','tab-hydration':'Hydration Corner',
-  'tab-progress':'Journey & Trophies'
+  'tab-progress':'Journey & Trophies','tab-ai':'Zenith AI Coach'
 };
 function navTo(btnEl){
   const tid = btnEl.getAttribute('data-tab');
@@ -1295,7 +1365,46 @@ function navTo(btnEl){
   if(tid==='tab-insights') resizeCharts();
   if(tid==='tab-yoga') renderYoga();
   if(tid==='tab-hydration') refreshHydration();
+  if(tid==='tab-ai') scrollChat();
   window.scrollTo({top:0,behavior:'smooth'});
+}
+function scrollChat(){ const c=document.getElementById('aiChat'); c.scrollTop=c.scrollHeight; }
+
+async function askAI(){
+  const inp=document.getElementById('aiInp');
+  const msg=inp.value.trim();
+  if(!msg)return;
+  inp.value='';
+  addAI('user', msg);
+  const loading = addAI('ai', 'Thinking...');
+  try {
+    const res=await fetch('/api/ai_coach',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({message:msg,mode:'chat'})});
+    const data=await res.json();
+    loading.textContent = data.reply;
+    scrollChat();
+  } catch(e) { loading.textContent = 'Error connecting to AI.'; }
+}
+
+async function analyzeAI(){
+  const btn=event.target; btn.disabled=true; btn.textContent='Analyzing...';
+  const resBox=document.getElementById('anaRes'); resBox.style.display='block'; resBox.textContent='Gathering metrics and processing...';
+  try {
+    const res=await fetch('/api/ai_coach',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({mode:'analysis'})});
+    const data=await res.json();
+    resBox.textContent = data.reply;
+  } catch(e) { resBox.textContent = 'Analysis failed.'; }
+  btn.disabled=false; btn.textContent='Run Analysis';
+}
+
+function addAI(role, txt){
+  const chat=document.getElementById('aiChat');
+  const div=document.createElement('div');
+  div.className = role==='user'?'chat-u':'chat-a';
+  div.style = role==='user'?'background:var(--a);padding:10px 14px;border-radius:12px;max-width:85%;align-self:flex-end;font-size:13.5px;color:#fff':'background:rgba(255,255,255,0.08);padding:10px 14px;border-radius:12px;max-width:85%;align-self:flex-start;font-size:13.5px;border:1px solid var(--b1)';
+  div.textContent = txt;
+  chat.appendChild(div);
+  scrollChat();
+  return div;
 }
 function navToBtn(tid){ const b=document.querySelector(`.nb[data-tab="${tid}"]`);if(b)navTo(b); }
 let chartInited=false;
@@ -1677,834 +1786,38 @@ async function saveJournal(){const inp=document.getElementById('jInput');const t
 //  YOGA SECTION
 // ═══════════════════════════════════════════════════════════
 const YOGA_DATA = [
-  {
-    id:'y1', body:'neck', title:"Neck Rolls", sub:"Slow circular neck rotations to release screen-time tension from the cervical spine.",
-    reps:"8 reps each side", sets:"2 sets", duration:120, difficulty:"Beginner", color:"#7c6dff", tag:"Neck & Shoulders",
-    svg:`<svg viewBox="0 0 100 130" xmlns="http://www.w3.org/2000/svg"><defs>
-      <linearGradient id="sk1" x1="0" y1="0" x2="1" y2="1"><stop offset="0%" stop-color="#f5c09a"/><stop offset="100%" stop-color="#d4814e"/></linearGradient>
-      <linearGradient id="tp1" x1="0" y1="0" x2="0" y2="1"><stop offset="0%" stop-color="#9b7aff"/><stop offset="100%" stop-color="#6a4ecc"/></linearGradient>
-      <linearGradient id="lg1" x1="0" y1="0" x2="0" y2="1"><stop offset="0%" stop-color="#28283a"/><stop offset="100%" stop-color="#14141f"/></linearGradient>
-    </defs>
-    <!-- hair bun -->
-    <ellipse cx="50" cy="8" rx="9" ry="8" fill="#1c0d08"/>
-    <ellipse cx="57" cy="5" rx="5" ry="5" fill="#1c0d08"/>
-    <path d="M42 12 Q50 16 58 12" stroke="#1c0d08" stroke-width="5" fill="none" stroke-linecap="round"/>
-    <!-- head tilted right -->
-    <ellipse cx="52" cy="17" rx="9" ry="10" fill="url(#sk1)" transform="rotate(12,52,17)"/>
-    <!-- ear -->
-    <ellipse cx="42" cy="17" rx="2.5" ry="3" fill="#d4814e"/>
-    <ellipse cx="61" cy="18" rx="2.5" ry="3" fill="#d4814e"/>
-    <!-- face -->
-    <ellipse cx="48" cy="15" rx="1.4" ry="1.8" fill="#2a1008"/>
-    <ellipse cx="54" cy="15" rx="1.4" ry="1.8" fill="#2a1008"/>
-    <path d="M46 12 Q48 11.2 50 12" stroke="#2a1008" stroke-width="0.8" fill="none"/>
-    <path d="M52 12 Q54 11.2 56 12" stroke="#2a1008" stroke-width="0.8" fill="none"/>
-    <path d="M48 19 Q51 21 54 19" stroke="#c06040" stroke-width="1" fill="none" stroke-linecap="round"/>
-    <!-- neck -->
-    <path d="M47 26 L46 33 L56 33 L54 26 Z" fill="#e09060"/>
-    <!-- back arm (left) -->
-    <path d="M26 37 Q19 52 16 70 Q17 74 20 71 Q22 56 28 42 Z" fill="#d4814e"/>
-    <ellipse cx="18" cy="71" rx="3.5" ry="4" fill="#d4814e"/>
-    <!-- torso/top -->
-    <path d="M26 37 Q50 32 74 37 L73 70 Q61 75 50 75 Q39 75 27 70 Z" fill="url(#tp1)"/>
-    <path d="M50 37 L50 75 Q58 72 63 68 L64 37 Q57 34 50 37 Z" fill="rgba(0,0,0,0.1)"/>
-    <!-- sports bra strap highlights -->
-    <line x1="42" y1="35" x2="42" y2="44" stroke="rgba(255,255,255,0.22)" stroke-width="1.5" stroke-linecap="round"/>
-    <line x1="58" y1="35" x2="58" y2="44" stroke="rgba(255,255,255,0.22)" stroke-width="1.5" stroke-linecap="round"/>
-    <!-- front arm (right) -->
-    <path d="M74 37 Q81 52 84 70 Q83 74 80 71 Q78 56 72 42 Z" fill="url(#sk1)"/>
-    <ellipse cx="82" cy="71" rx="3.5" ry="4" fill="#d4814e"/>
-    <!-- leggings hips -->
-    <path d="M27 70 Q38 80 50 80 Q62 80 73 70 L75 83 Q62 90 50 90 Q38 90 25 83 Z" fill="url(#lg1)"/>
-    <!-- left leg -->
-    <path d="M29 85 L27 112 Q30 117 34 112 L38 87 Z" fill="url(#lg1)"/>
-    <ellipse cx="32" cy="106" rx="4.5" ry="3.5" fill="#353548"/>
-    <path d="M27 110 L26 124 Q30 128 35 124 L36 110 Z" fill="#1e1e2e"/>
-    <path d="M24 124 Q26 129 34 129 Q37 127 37 124 Z" fill="#d4814e"/>
-    <!-- right leg -->
-    <path d="M62 87 L66 112 Q70 117 74 112 L72 85 Z" fill="url(#lg1)"/>
-    <ellipse cx="70" cy="106" rx="4.5" ry="3.5" fill="#353548"/>
-    <path d="M66 110 L67 124 Q71 128 76 124 L75 110 Z" fill="#1e1e2e"/>
-    <path d="M66 124 Q68 129 76 129 Q79 127 79 124 Z" fill="#d4814e"/>
-    <!-- neck-roll arc indicator -->
-    <path d="M58 7 Q74 2 70 16" stroke="rgba(0,229,192,0.8)" stroke-width="1.8" fill="none" stroke-dasharray="3 2.5" stroke-linecap="round"/>
-    <circle cx="70" cy="16" r="2.2" fill="rgba(0,229,192,0.85)"/>
-    </svg>`
-  },
-  {
-    id:'y2', body:'neck', title:"Shoulder Shrugs", sub:"Lift shoulders to ears and release, melting away upper trapezius tension.",
-    reps:"12 reps", sets:"3 sets", duration:90, difficulty:"Beginner", color:"#00e5c0", tag:"Neck & Shoulders",
-    svg:`<svg viewBox="0 0 100 130" xmlns="http://www.w3.org/2000/svg"><defs>
-      <linearGradient id="sk2" x1="0" y1="0" x2="1" y2="1"><stop offset="0%" stop-color="#f5c09a"/><stop offset="100%" stop-color="#d4814e"/></linearGradient>
-      <linearGradient id="tp2" x1="0" y1="0" x2="0" y2="1"><stop offset="0%" stop-color="#00e5c0"/><stop offset="100%" stop-color="#00a88a"/></linearGradient>
-      <linearGradient id="lg2" x1="0" y1="0" x2="0" y2="1"><stop offset="0%" stop-color="#28283a"/><stop offset="100%" stop-color="#14141f"/></linearGradient>
-    </defs>
-    <!-- hair -->
-    <path d="M40 10 Q50 4 60 10 Q62 6 50 3 Q38 6 40 10 Z" fill="#1c0d08"/>
-    <ellipse cx="50" cy="10" rx="10" ry="9" fill="#1c0d08"/>
-    <!-- head -->
-    <ellipse cx="50" cy="18" rx="9.5" ry="10" fill="url(#sk2)"/>
-    <ellipse cx="40" cy="18" rx="2.5" ry="3" fill="#d4814e"/>
-    <ellipse cx="60" cy="18" rx="2.5" ry="3" fill="#d4814e"/>
-    <!-- face -->
-    <ellipse cx="46" cy="16" rx="1.4" ry="1.7" fill="#2a1008"/>
-    <ellipse cx="54" cy="16" rx="1.4" ry="1.7" fill="#2a1008"/>
-    <path d="M44 13 Q46 12 48 13" stroke="#2a1008" stroke-width="0.8" fill="none"/>
-    <path d="M52 13 Q54 12 56 13" stroke="#2a1008" stroke-width="0.8" fill="none"/>
-    <path d="M47 20 Q50 22 53 20" stroke="#c06040" stroke-width="1" fill="none" stroke-linecap="round"/>
-    <!-- neck -->
-    <path d="M46 27 L45 33 L55 33 L54 27 Z" fill="#e09060"/>
-    <!-- shoulders raised high (shrug position) -->
-    <!-- left arm raised &amp; bent -->
-    <path d="M26 34 Q15 30 12 38 Q14 46 22 44 Q28 42 30 38 Z" fill="url(#sk2)"/>
-    <path d="M22 44 Q14 54 13 66 Q15 69 18 66 Q20 55 24 46 Z" fill="url(#sk2)"/>
-    <ellipse cx="15" cy="67" rx="3.5" ry="4" fill="#d4814e"/>
-    <!-- right arm raised &amp; bent -->
-    <path d="M74 34 Q85 30 88 38 Q86 46 78 44 Q72 42 70 38 Z" fill="url(#sk2)"/>
-    <path d="M78 44 Q86 54 87 66 Q85 69 82 66 Q80 55 76 46 Z" fill="url(#sk2)"/>
-    <ellipse cx="85" cy="67" rx="3.5" ry="4" fill="#d4814e"/>
-    <!-- torso -->
-    <path d="M26 34 Q50 28 74 34 L73 70 Q61 76 50 76 Q39 76 27 70 Z" fill="url(#tp2)"/>
-    <path d="M50 34 L50 76 Q57 73 61 69 L62 34 Q56 31 50 34 Z" fill="rgba(0,0,0,0.1)"/>
-    <line x1="42" y1="32" x2="42" y2="42" stroke="rgba(255,255,255,0.22)" stroke-width="1.5" stroke-linecap="round"/>
-    <line x1="58" y1="32" x2="58" y2="42" stroke="rgba(255,255,255,0.22)" stroke-width="1.5" stroke-linecap="round"/>
-    <!-- shrug motion arrows -->
-    <path d="M30 32 Q28 27 30 23" stroke="rgba(0,229,192,0.7)" stroke-width="1.5" fill="none" stroke-linecap="round"/>
-    <path d="M30 23 L28 26 M30 23 L33 26" stroke="rgba(0,229,192,0.7)" stroke-width="1.2" fill="none" stroke-linecap="round"/>
-    <path d="M70 32 Q72 27 70 23" stroke="rgba(0,229,192,0.7)" stroke-width="1.5" fill="none" stroke-linecap="round"/>
-    <path d="M70 23 L68 26 M70 23 L73 26" stroke="rgba(0,229,192,0.7)" stroke-width="1.2" fill="none" stroke-linecap="round"/>
-    <!-- hips &amp; legs -->
-    <path d="M27 70 Q38 80 50 80 Q62 80 73 70 L75 83 Q62 90 50 90 Q38 90 25 83 Z" fill="url(#lg2)"/>
-    <path d="M29 85 L27 112 Q31 117 35 112 L38 87 Z" fill="url(#lg2)"/>
-    <ellipse cx="32" cy="106" rx="4.5" ry="3.5" fill="#353548"/>
-    <path d="M27 110 L26 124 Q30 128 35 124 L36 110 Z" fill="#1e1e2e"/>
-    <path d="M24 124 Q26 129 34 129 Q37 127 37 124 Z" fill="#d4814e"/>
-    <path d="M62 87 L66 112 Q70 117 74 112 L72 85 Z" fill="url(#lg2)"/>
-    <ellipse cx="70" cy="106" rx="4.5" ry="3.5" fill="#353548"/>
-    <path d="M66 110 L67 124 Q71 128 76 124 L75 110 Z" fill="#1e1e2e"/>
-    <path d="M66 124 Q68 129 76 129 Q79 127 79 124 Z" fill="#d4814e"/>
-    </svg>`
-  },
-  {
-    id:'y3', body:'back', title:"Cat-Cow Stretch", sub:"Spinal flexion and extension on all-fours mobilizes the entire back.",
-    reps:"10 cycles", sets:"2 sets", duration:180, difficulty:"Beginner", color:"#ff6b9d", tag:"Back & Spine",
-    svg:`<svg viewBox="0 0 100 130" xmlns="http://www.w3.org/2000/svg"><defs>
-      <linearGradient id="sk3" x1="0" y1="0" x2="1" y2="1"><stop offset="0%" stop-color="#f5c09a"/><stop offset="100%" stop-color="#d4814e"/></linearGradient>
-      <linearGradient id="tp3" x1="0" y1="0" x2="0" y2="1"><stop offset="0%" stop-color="#ff8bb8"/><stop offset="100%" stop-color="#d44a80"/></linearGradient>
-      <linearGradient id="lg3" x1="0" y1="0" x2="0" y2="1"><stop offset="0%" stop-color="#28283a"/><stop offset="100%" stop-color="#14141f"/></linearGradient>
-    </defs>
-    <!-- figure on all fours, side profile facing right, cat pose (spine arched up) -->
-    <!-- hair ponytail hanging down -->
-    <path d="M76 18 Q82 26 78 34 Q74 38 72 32 Q76 28 76 22 Z" fill="#1c0d08"/>
-    <!-- head (profile right) -->
-    <ellipse cx="72" cy="20" rx="9" ry="9.5" fill="url(#sk3)"/>
-    <!-- facial profile -->
-    <ellipse cx="79" cy="20" rx="2" ry="2.5" fill="#d4814e"/><!-- ear stub -->
-    <path d="M74 18 Q80 18 82 21 Q80 24 74 23" fill="#e8a070" stroke="none"/><!-- face profile bit -->
-    <ellipse cx="75" cy="18" rx="1.2" ry="1.5" fill="#2a1008"/><!-- eye -->
-    <path d="M73 15 Q76 14 78 15" stroke="#2a1008" stroke-width="0.8" fill="none"/><!-- brow -->
-    <!-- neck -->
-    <path d="M65 25 Q64 32 64 36 L70 36 Q69 30 68 25 Z" fill="#e09060"/>
-    <!-- torso arched up (cat pose) -- spine curves upward -->
-    <path d="M64 36 Q50 28 36 36 Q24 44 18 52" stroke="url(#tp3)" stroke-width="9" fill="none" stroke-linecap="round"/>
-    <path d="M64 36 Q50 28 36 36 Q24 44 18 52" stroke="rgba(255,255,255,0.12)" stroke-width="4" fill="none" stroke-linecap="round"/>
-    <!-- belly line (lower torso) -->
-    <path d="M63 40 Q50 34 36 40 Q26 46 20 54" stroke="#d47060" stroke-width="5" fill="none" stroke-linecap="round"/>
-    <!-- left forearm/hand (far) -->
-    <path d="M18 52 L14 72 Q15 76 18 74 L20 56 Z" fill="#d4814e"/>
-    <path d="M13 73 Q14 78 18 78 Q20 76 19 73 Z" fill="#d4814e"/>
-    <!-- right forearm (near) -->
-    <path d="M19 54 L16 72 Q18 76 21 74 L22 56 Z" fill="url(#sk3)"/>
-    <path d="M15 72 Q16 77 20 77 Q22 75 21 72 Z" fill="url(#sk3)"/>
-    <!-- hips (rounded) -->
-    <ellipse cx="64" cy="48" rx="10" ry="9" fill="url(#lg3)"/>
-    <!-- left back leg (far) -->
-    <path d="M60 55 L58 78 Q61 82 64 78 L66 57 Z" fill="#2a2a40"/>
-    <path d="M57 77 L56 90 Q59 94 62 90 L63 77 Z" fill="#1e1e30"/>
-    <!-- right back leg (near) -->
-    <path d="M64 57 L64 80 Q67 84 70 80 L70 59 Z" fill="url(#lg3)"/>
-    <path d="M63 79 L63 92 Q66 96 69 92 L70 79 Z" fill="#1e1e30"/>
-    <!-- feet flat -->
-    <path d="M54 90 Q55 96 62 96 Q64 94 63 90 Z" fill="#d4814e"/>
-    <path d="M62 92 Q63 98 70 98 Q72 96 71 92 Z" fill="url(#sk3)"/>
-    <!-- floor line -->
-    <line x1="5" y1="98" x2="95" y2="98" stroke="rgba(255,107,157,0.2)" stroke-width="1"/>
-    <!-- cat arch indicator arrow -->
-    <path d="M42 26 Q50 20 58 26" stroke="rgba(0,229,192,0.7)" stroke-width="1.6" fill="none" stroke-dasharray="3 2" stroke-linecap="round"/>
-    <path d="M58 26 L55 24 M58 26 L57 29" stroke="rgba(0,229,192,0.7)" stroke-width="1.3" fill="none" stroke-linecap="round"/>
-    </svg>`
-  },
-  {
-    id:'y4', body:'back', title:"Child's Pose", sub:"Deeply restful stretch. Releases lower back, hips and lengthens the spine.",
-    reps:"Hold 30s", sets:"3 sets", duration:150, difficulty:"Beginner", color:"#ffb347", tag:"Back & Spine",
-    svg:`<svg viewBox="0 0 100 130" xmlns="http://www.w3.org/2000/svg"><defs>
-      <linearGradient id="sk4" x1="0" y1="0" x2="1" y2="1"><stop offset="0%" stop-color="#f5c09a"/><stop offset="100%" stop-color="#d4814e"/></linearGradient>
-      <linearGradient id="tp4" x1="0" y1="0" x2="0" y2="1"><stop offset="0%" stop-color="#ffca6a"/><stop offset="100%" stop-color="#d4882a"/></linearGradient>
-      <linearGradient id="lg4" x1="0" y1="0" x2="0" y2="1"><stop offset="0%" stop-color="#28283a"/><stop offset="100%" stop-color="#14141f"/></linearGradient>
-    </defs>
-    <!-- figure in child's pose, side profile. head on floor left, butt up right -->
-    <!-- hair spreading on floor -->
-    <path d="M8 68 Q12 62 18 65 Q16 70 10 72 Z" fill="#1c0d08"/>
-    <path d="M10 66 Q14 58 22 60 Q20 66 12 70 Z" fill="#1c0d08"/>
-    <!-- head resting on floor (forehead down) -->
-    <ellipse cx="16" cy="67" rx="9" ry="8.5" fill="url(#sk4)" transform="rotate(-15,16,67)"/>
-    <!-- ear -->
-    <ellipse cx="16" cy="59" rx="2.5" ry="3" fill="#d4814e"/>
-    <!-- torso long stretching from head to hips -->
-    <path d="M22 64 Q40 56 56 58 Q68 60 74 65" stroke="url(#tp4)" stroke-width="10" fill="none" stroke-linecap="round"/>
-    <path d="M22 66 Q40 60 56 62 Q68 64 74 67" stroke="rgba(255,255,255,0.1)" stroke-width="4" fill="none" stroke-linecap="round"/>
-    <!-- arms extended forward along floor -->
-    <path d="M22 64 L8 60 Q5 62 7 65 Q9 68 12 66 L22 68 Z" fill="url(#sk4)"/>
-    <path d="M5 63 Q4 68 8 70 Q11 69 11 66 Z" fill="#d4814e"/>
-    <!-- hips rounded (glutes sitting back) -->
-    <ellipse cx="76" cy="72" rx="12" ry="10" fill="url(#lg4)"/>
-    <!-- shins folded back -->
-    <path d="M72 80 Q80 90 88 88 Q91 82 86 78 Q82 76 76 80 Z" fill="url(#lg4)"/>
-    <path d="M74 82 Q82 92 90 90 Q93 84 88 80 Q84 78 78 82 Z" fill="#252538"/>
-    <!-- feet soles visible -->
-    <path d="M84 86 Q90 84 92 90 Q88 96 82 92 Z" fill="url(#sk4)"/>
-    <path d="M86 90 Q92 88 94 94 Q90 100 84 96 Z" fill="#d4814e"/>
-    <!-- forearms on floor faint -->
-    <line x1="8" y1="68" x2="22" y2="72" stroke="#c07848" stroke-width="5" stroke-linecap="round"/>
-    <!-- floor -->
-    <line x1="2" y1="96" x2="98" y2="96" stroke="rgba(255,179,71,0.25)" stroke-width="1"/>
-    <!-- breath/relax dots -->
-    <circle cx="16" cy="82" r="1.5" fill="rgba(0,229,192,0.6)"/>
-    <circle cx="20" cy="85" r="1" fill="rgba(0,229,192,0.4)"/>
-    <circle cx="24" cy="88" r="0.8" fill="rgba(0,229,192,0.3)"/>
-    </svg>`
-  },
-  {
-    id:'y5', body:'hip', title:"Butterfly Pose", sub:"Opens hips and groin, perfect for desk workers with tight hip flexors.",
-    reps:"Hold 45s", sets:"2 sets", duration:120, difficulty:"Beginner", color:"#4cde80", tag:"Hips & Legs",
-    svg:`<svg viewBox="0 0 100 130" xmlns="http://www.w3.org/2000/svg"><defs>
-      <linearGradient id="sk5" x1="0" y1="0" x2="1" y2="1"><stop offset="0%" stop-color="#f5c09a"/><stop offset="100%" stop-color="#d4814e"/></linearGradient>
-      <linearGradient id="tp5" x1="0" y1="0" x2="0" y2="1"><stop offset="0%" stop-color="#5ef09a"/><stop offset="100%" stop-color="#28b060"/></linearGradient>
-      <linearGradient id="lg5" x1="0" y1="0" x2="0" y2="1"><stop offset="0%" stop-color="#28283a"/><stop offset="100%" stop-color="#14141f"/></linearGradient>
-    </defs>
-    <!-- seated butterfly, front view -->
-    <!-- hair in high bun -->
-    <circle cx="50" cy="6" r="6" fill="#1c0d08"/>
-    <ellipse cx="50" cy="10" rx="5" ry="4" fill="#1c0d08"/>
-    <path d="M43 13 Q50 17 57 13" stroke="#1c0d08" stroke-width="4" fill="none" stroke-linecap="round"/>
-    <!-- head -->
-    <ellipse cx="50" cy="19" rx="9.5" ry="10" fill="url(#sk5)"/>
-    <ellipse cx="40" cy="19" rx="2.5" ry="3" fill="#d4814e"/>
-    <ellipse cx="60" cy="19" rx="2.5" ry="3" fill="#d4814e"/>
-    <!-- face -->
-    <ellipse cx="46" cy="17" rx="1.4" ry="1.7" fill="#2a1008"/>
-    <ellipse cx="54" cy="17" rx="1.4" ry="1.7" fill="#2a1008"/>
-    <path d="M44 14 Q46 13 48 14" stroke="#2a1008" stroke-width="0.8" fill="none"/>
-    <path d="M52 14 Q54 13 56 14" stroke="#2a1008" stroke-width="0.8" fill="none"/>
-    <path d="M47 21 Q50 23 53 21" stroke="#c06040" stroke-width="1" fill="none" stroke-linecap="round"/>
-    <!-- neck -->
-    <path d="M46 28 L45 35 L55 35 L54 28 Z" fill="#e09060"/>
-    <!-- torso/top -->
-    <path d="M26 38 Q50 32 74 38 L73 72 Q61 78 50 78 Q39 78 27 72 Z" fill="url(#tp5)"/>
-    <path d="M50 38 L50 78 Q58 74 62 70 L63 38 Q56 35 50 38 Z" fill="rgba(0,0,0,0.1)"/>
-    <line x1="42" y1="36" x2="42" y2="46" stroke="rgba(255,255,255,0.22)" stroke-width="1.5" stroke-linecap="round"/>
-    <line x1="58" y1="36" x2="58" y2="46" stroke="rgba(255,255,255,0.22)" stroke-width="1.5" stroke-linecap="round"/>
-    <!-- left arm resting on knee -->
-    <path d="M26 38 Q20 52 18 68 Q19 72 22 70 Q23 56 28 44 Z" fill="url(#sk5)"/>
-    <ellipse cx="20" cy="70" rx="3.5" ry="4" fill="#d4814e"/>
-    <!-- right arm resting on knee -->
-    <path d="M74 38 Q80 52 82 68 Q81 72 78 70 Q77 56 72 44 Z" fill="url(#sk5)"/>
-    <ellipse cx="80" cy="70" rx="3.5" ry="4" fill="#d4814e"/>
-    <!-- hips seated -->
-    <ellipse cx="50" cy="84" rx="24" ry="8" fill="url(#lg5)"/>
-    <!-- butterfly left leg (thigh outward, knee down) -->
-    <path d="M30 84 Q18 90 14 104 Q20 108 28 100 Q32 92 36 86 Z" fill="url(#lg5)"/>
-    <!-- left shin folded in -->
-    <path d="M14 104 Q18 112 28 112 Q34 108 32 100 Q22 106 16 104 Z" fill="#252538"/>
-    <!-- butterfly right leg -->
-    <path d="M70 84 Q82 90 86 104 Q80 108 72 100 Q68 92 64 86 Z" fill="url(#lg5)"/>
-    <path d="M86 104 Q82 112 72 112 Q66 108 68 100 Q78 106 84 104 Z" fill="#252538"/>
-    <!-- feet touching in center -->
-    <ellipse cx="50" cy="110" rx="12" ry="6" fill="url(#sk5)"/>
-    <path d="M42 108 Q50 114 58 108" stroke="#c07848" stroke-width="2" fill="none"/>
-    <!-- floor -->
-    <line x1="5" y1="118" x2="95" y2="118" stroke="rgba(76,222,128,0.2)" stroke-width="1"/>
-    <!-- hands on feet -->
-    <ellipse cx="20" cy="72" rx="4" ry="3" fill="#d4814e" transform="rotate(-10,20,72)"/>
-    <ellipse cx="80" cy="72" rx="4" ry="3" fill="#d4814e" transform="rotate(10,80,72)"/>
-    </svg>`
-  },
-  {
-    id:'y6', body:'hip', title:"Low Lunge", sub:"Deep hip flexor stretch that counteracts tight hips from prolonged sitting.",
-    reps:"30s each side", sets:"2 sets", duration:180, difficulty:"Intermediate", color:"#7c6dff", tag:"Hips & Legs",
-    svg:`<svg viewBox="0 0 100 130" xmlns="http://www.w3.org/2000/svg"><defs>
-      <linearGradient id="sk6" x1="0" y1="0" x2="1" y2="1"><stop offset="0%" stop-color="#f5c09a"/><stop offset="100%" stop-color="#d4814e"/></linearGradient>
-      <linearGradient id="tp6" x1="0" y1="0" x2="0" y2="1"><stop offset="0%" stop-color="#9b7aff"/><stop offset="100%" stop-color="#6040cc"/></linearGradient>
-      <linearGradient id="lg6" x1="0" y1="0" x2="0" y2="1"><stop offset="0%" stop-color="#28283a"/><stop offset="100%" stop-color="#14141f"/></linearGradient>
-    </defs>
-    <!-- low lunge, 3/4 view, left leg forward, right knee on ground, arms up -->
-    <!-- hair bun -->
-    <circle cx="58" cy="7" r="6" fill="#1c0d08"/>
-    <path d="M50 12 Q58 16 66 12" stroke="#1c0d08" stroke-width="4.5" fill="none" stroke-linecap="round"/>
-    <!-- head -->
-    <ellipse cx="58" cy="18" rx="9" ry="9.5" fill="url(#sk6)"/>
-    <ellipse cx="68" cy="18" rx="2.3" ry="3" fill="#d4814e"/>
-    <!-- face (slightly angled) -->
-    <ellipse cx="54" cy="16" rx="1.4" ry="1.7" fill="#2a1008"/>
-    <ellipse cx="61" cy="16" rx="1.4" ry="1.7" fill="#2a1008"/>
-    <path d="M52 13 Q54 12 56 13" stroke="#2a1008" stroke-width="0.8" fill="none"/>
-    <path d="M59 13 Q61 12 63 13" stroke="#2a1008" stroke-width="0.8" fill="none"/>
-    <path d="M54 21 Q58 23 62 21" stroke="#c06040" stroke-width="1" fill="none" stroke-linecap="round"/>
-    <!-- neck -->
-    <path d="M54 27 L53 34 L63 34 L62 27 Z" fill="#e09060"/>
-    <!-- left arm raised straight up -->
-    <path d="M42 40 Q36 28 38 14 Q40 10 43 13 Q42 24 44 38 Z" fill="url(#sk6)"/>
-    <ellipse cx="40" cy="12" rx="3.5" ry="4.5" fill="#d4814e"/>
-    <!-- right arm raised straight up -->
-    <path d="M64 38 Q68 26 66 12 Q68 8 71 11 Q72 22 68 40 Z" fill="url(#sk6)"/>
-    <ellipse cx="68" cy="10" rx="3.5" ry="4.5" fill="#d4814e"/>
-    <!-- torso angled forward slightly -->
-    <path d="M42 40 Q54 36 64 38 L64 72 Q54 78 44 74 Q40 66 42 58 Z" fill="url(#tp6)"/>
-    <path d="M54 38 L54 78 Q60 75 63 70 L63 38 Q58 36 54 38 Z" fill="rgba(0,0,0,0.12)"/>
-    <!-- front left leg bent (knee forward) -->
-    <path d="M44 74 Q38 84 30 92 Q26 96 24 104" stroke="url(#lg6)" stroke-width="9" fill="none" stroke-linecap="round"/>
-    <!-- front left lower leg -->
-    <path d="M24 104 L22 118 Q26 122 30 118 L32 104 Z" fill="url(#lg6)"/>
-    <!-- left foot flat -->
-    <path d="M20 118 Q22 124 30 124 Q33 122 32 118 Z" fill="url(#sk6)"/>
-    <!-- back right leg (knee on ground) -->
-    <path d="M62 74 Q72 78 84 76 Q90 80 88 88" stroke="#252538" stroke-width="9" fill="none" stroke-linecap="round"/>
-    <!-- back lower leg flat on ground -->
-    <path d="M88 88 L92 100 Q90 104 86 100 L84 88 Z" fill="#1e1e2e"/>
-    <!-- back knee cushion -->
-    <ellipse cx="88" cy="88" rx="6" ry="4" fill="#353548"/>
-    <!-- back foot -->
-    <path d="M90 100 Q94 98 96 106 Q90 108 88 102 Z" fill="#d4814e"/>
-    <!-- floor -->
-    <line x1="5" y1="124" x2="95" y2="124" stroke="rgba(124,109,255,0.2)" stroke-width="1"/>
-    <!-- hip flexor stretch line indicator -->
-    <path d="M68 76 Q76 68 82 72" stroke="rgba(0,229,192,0.65)" stroke-width="1.5" fill="none" stroke-dasharray="3 2" stroke-linecap="round"/>
-    </svg>`
-  },
-  {
-    id:'y7', body:'core', title:"Plank Hold", sub:"Full body stabilization. Builds core endurance, shoulder and back strength.",
-    reps:"Hold 30-60s", sets:"3 sets", duration:210, difficulty:"Intermediate", color:"#ff6b9d", tag:"Core",
-    svg:`<svg viewBox="0 0 100 130" xmlns="http://www.w3.org/2000/svg"><defs>
-      <linearGradient id="sk7" x1="0" y1="0" x2="1" y2="1"><stop offset="0%" stop-color="#f5c09a"/><stop offset="100%" stop-color="#d4814e"/></linearGradient>
-      <linearGradient id="tp7" x1="0" y1="0" x2="0" y2="1"><stop offset="0%" stop-color="#ff8bb8"/><stop offset="100%" stop-color="#cc3870"/></linearGradient>
-      <linearGradient id="lg7" x1="0" y1="0" x2="0" y2="1"><stop offset="0%" stop-color="#28283a"/><stop offset="100%" stop-color="#14141f"/></linearGradient>
-    </defs>
-    <!-- plank pose side view, figure facing left, body horizontal -->
-    <!-- ponytail hanging -->
-    <path d="M74 38 Q82 44 80 52 Q76 54 74 48 Q76 44 74 40 Z" fill="#1c0d08"/>
-    <!-- head (profile left) -->
-    <ellipse cx="78" cy="38" rx="9" ry="9.5" fill="url(#sk7)"/>
-    <ellipse cx="68" cy="38" rx="2.3" ry="2.8" fill="#d4814e"/>
-    <ellipse cx="76" cy="35" rx="1.3" ry="1.6" fill="#2a1008"/>
-    <path d="M72 32 Q76 31 79 33" stroke="#2a1008" stroke-width="0.8" fill="none"/>
-    <path d="M74 40 Q77 42 80 40" stroke="#c06040" stroke-width="1" fill="none" stroke-linecap="round"/>
-    <!-- neck -->
-    <path d="M70 44 Q68 50 68 54 L74 54 Q73 49 72 44 Z" fill="#e09060"/>
-    <!-- arm (straight, wrist on floor) -->
-    <path d="M68 54 L52 62 Q50 64 50 68 L56 68 Q56 65 58 63 L72 56 Z" fill="url(#sk7)"/>
-    <ellipse cx="51" cy="69" rx="4.5" ry="3" fill="#d4814e" transform="rotate(-10,51,69)"/>
-    <!-- torso horizontal, slightly inclined -->
-    <path d="M68 52 Q50 56 30 60 Q18 62 14 66" stroke="url(#tp7)" stroke-width="11" fill="none" stroke-linecap="round"/>
-    <path d="M68 54 Q50 58 30 62 Q18 64 15 68" stroke="rgba(255,255,255,0.1)" stroke-width="4" fill="none" stroke-linecap="round"/>
-    <!-- abs definition lines -->
-    <path d="M56 58 Q54 62 56 66" stroke="rgba(255,255,255,0.18)" stroke-width="1" fill="none"/>
-    <path d="M48 60 Q46 64 48 68" stroke="rgba(255,255,255,0.18)" stroke-width="1" fill="none"/>
-    <!-- hips -->
-    <ellipse cx="28" cy="65" rx="10" ry="7" fill="url(#lg7)"/>
-    <!-- left leg (far, slightly behind) -->
-    <path d="M22 68 L16 78 Q18 82 22 80 L26 70 Z" fill="#252538"/>
-    <!-- right leg (near) -->
-    <path d="M24 70 L18 80 Q20 84 24 82 L28 72 Z" fill="url(#lg7)"/>
-    <!-- toes on floor (right foot) -->
-    <path d="M17 81 Q15 84 19 86 Q22 85 22 82 Z" fill="url(#sk7)"/>
-    <path d="M15 82 Q13 85 17 88 Q20 87 20 84 Z" fill="#d4814e"/>
-    <!-- floor -->
-    <line x1="5" y1="88" x2="95" y2="88" stroke="rgba(255,107,157,0.2)" stroke-width="1"/>
-    <!-- plank alignment line (dashed straight line from head to toe) -->
-    <path d="M78 38 Q58 50 18 82" stroke="rgba(0,229,192,0.45)" stroke-width="1.2" fill="none" stroke-dasharray="4 3"/>
-    </svg>`
-  },
-  {
-    id:'y8', body:'core', title:"Boat Pose", sub:"Powerful abdominal and hip flexor strengthener. Balancing on tailbone.",
-    reps:"Hold 20s", sets:"4 sets", duration:150, difficulty:"Advanced", color:"#ffb347", tag:"Core",
-    svg:`<svg viewBox="0 0 100 130" xmlns="http://www.w3.org/2000/svg"><defs>
-      <linearGradient id="sk8" x1="0" y1="0" x2="1" y2="1"><stop offset="0%" stop-color="#f5c09a"/><stop offset="100%" stop-color="#d4814e"/></linearGradient>
-      <linearGradient id="tp8" x1="0" y1="0" x2="0" y2="1"><stop offset="0%" stop-color="#ffca6a"/><stop offset="100%" stop-color="#d4882a"/></linearGradient>
-      <linearGradient id="lg8" x1="0" y1="0" x2="0" y2="1"><stop offset="0%" stop-color="#28283a"/><stop offset="100%" stop-color="#14141f"/></linearGradient>
-    </defs>
-    <!-- boat pose, side view facing right, V-balance on tailbone -->
-    <!-- hair bun high -->
-    <circle cx="36" cy="26" r="6" fill="#1c0d08"/>
-    <path d="M28 30 Q36 34 44 30" stroke="#1c0d08" stroke-width="4" fill="none" stroke-linecap="round"/>
-    <!-- head tilted back slightly -->
-    <ellipse cx="36" cy="36" rx="9" ry="9.5" fill="url(#sk8)" transform="rotate(-10,36,36)"/>
-    <!-- profile ear -->
-    <ellipse cx="46" cy="36" rx="2.3" ry="2.8" fill="#d4814e"/>
-    <ellipse cx="38" cy="33" rx="1.3" ry="1.6" fill="#2a1008"/>
-    <path d="M35 30 Q38 29 41 30" stroke="#2a1008" stroke-width="0.8" fill="none"/>
-    <path d="M37 38 Q40 40 43 38" stroke="#c06040" stroke-width="1" fill="none" stroke-linecap="round"/>
-    <!-- neck -->
-    <path d="M40 44 Q42 50 44 54 L50 52 Q48 48 44 44 Z" fill="#e09060"/>
-    <!-- torso leaning back at ~45° -->
-    <path d="M44 54 Q40 66 38 80" stroke="url(#tp8)" stroke-width="11" fill="none" stroke-linecap="round"/>
-    <path d="M50 52 Q46 64 44 78" stroke="rgba(255,255,255,0.1)" stroke-width="4" fill="none" stroke-linecap="round"/>
-    <!-- arms reaching forward parallel to legs -->
-    <path d="M46 58 Q64 50 80 46 Q82 48 80 52 Q66 55 50 62 Z" fill="url(#sk8)"/>
-    <ellipse cx="81" cy="49" rx="4" ry="3" fill="#d4814e" transform="rotate(20,81,49)"/>
-    <path d="M46 62 Q64 56 80 52 Q82 54 80 58 Q66 59 50 66 Z" fill="url(#sk8)"/>
-    <ellipse cx="81" cy="55" rx="4" ry="3" fill="#d4814e" transform="rotate(15,81,55)"/>
-    <!-- legs raised (V shape) -->
-    <path d="M38 80 Q54 70 72 58 Q76 56 78 60 Q74 64 58 74 Q46 82 42 86" stroke="url(#lg8)" stroke-width="9" fill="none" stroke-linecap="round"/>
-    <!-- second leg slightly apart -->
-    <path d="M40 84 Q56 74 74 62 Q78 60 80 64 Q76 68 60 78 Q48 86 44 90" stroke="#252538" stroke-width="7" fill="none" stroke-linecap="round"/>
-    <!-- feet pointed -->
-    <path d="M76 58 Q82 54 86 60 Q82 66 78 62 Z" fill="url(#sk8)"/>
-    <path d="M78 62 Q84 58 88 64 Q84 70 80 66 Z" fill="#d4814e"/>
-    <!-- balance point on tailbone -->
-    <circle cx="40" cy="82" r="4" fill="rgba(255,179,71,0.4)" stroke="rgba(255,179,71,0.8)" stroke-width="1.5"/>
-    <!-- floor shadow -->
-    <ellipse cx="42" cy="94" rx="18" ry="4" fill="rgba(255,179,71,0.08)"/>
-    <line x1="5" y1="96" x2="95" y2="96" stroke="rgba(255,179,71,0.18)" stroke-width="1"/>
-    </svg>`
-  },
-  {
-    id:'y9', body:'full', title:"Sun Salutation", sub:"The classic 12-posture warm-up flow. Energizes the full body and mind.",
-    reps:"6 rounds", sets:"1 set", duration:300, difficulty:"All Levels", color:"#00e5c0", tag:"Full Body",
-    svg:`<svg viewBox="0 0 100 130" xmlns="http://www.w3.org/2000/svg"><defs>
-      <linearGradient id="sk9" x1="0" y1="0" x2="1" y2="1"><stop offset="0%" stop-color="#f5c09a"/><stop offset="100%" stop-color="#d4814e"/></linearGradient>
-      <linearGradient id="tp9" x1="0" y1="0" x2="0" y2="1"><stop offset="0%" stop-color="#00e5c0"/><stop offset="100%" stop-color="#009980"/></linearGradient>
-      <linearGradient id="lg9" x1="0" y1="0" x2="0" y2="1"><stop offset="0%" stop-color="#28283a"/><stop offset="100%" stop-color="#14141f"/></linearGradient>
-      <radialGradient id="sunGlow" cx="50%" cy="50%" r="50%"><stop offset="0%" stop-color="#ffea80" stop-opacity="0.5"/><stop offset="100%" stop-color="#ffb340" stop-opacity="0"/></radialGradient>
-    </defs>
-    <!-- sun glow -->
-    <circle cx="50" cy="14" r="18" fill="url(#sunGlow)"/>
-    <!-- sun rays -->
-    <line x1="50" y1="2" x2="50" y2="0" stroke="#ffca50" stroke-width="1.8" stroke-linecap="round"/>
-    <line x1="60" y1="5" x2="62" y2="3" stroke="#ffca50" stroke-width="1.5" stroke-linecap="round"/>
-    <line x1="40" y1="5" x2="38" y2="3" stroke="#ffca50" stroke-width="1.5" stroke-linecap="round"/>
-    <line x1="66" y1="12" x2="69" y2="11" stroke="#ffca50" stroke-width="1.3" stroke-linecap="round"/>
-    <line x1="34" y1="12" x2="31" y2="11" stroke="#ffca50" stroke-width="1.3" stroke-linecap="round"/>
-    <!-- hair in bun -->
-    <circle cx="50" cy="20" r="5.5" fill="#1c0d08"/>
-    <path d="M43 24 Q50 28 57 24" stroke="#1c0d08" stroke-width="4" fill="none" stroke-linecap="round"/>
-    <!-- head leaning slightly back (upward gaze) -->
-    <ellipse cx="50" cy="30" rx="9" ry="9.5" fill="url(#sk9)" transform="rotate(-8,50,30)"/>
-    <ellipse cx="40" cy="30" rx="2.3" ry="2.8" fill="#d4814e"/>
-    <ellipse cx="60" cy="30" rx="2.3" ry="2.8" fill="#d4814e"/>
-    <!-- face looking up -->
-    <ellipse cx="47" cy="29" rx="1.3" ry="1.6" fill="#2a1008"/>
-    <ellipse cx="54" cy="29" rx="1.3" ry="1.6" fill="#2a1008"/>
-    <path d="M44 26 Q46 25 48 26" stroke="#2a1008" stroke-width="0.8" fill="none"/>
-    <path d="M52 26 Q54 25 56 26" stroke="#2a1008" stroke-width="0.8" fill="none"/>
-    <!-- neck -->
-    <path d="M46 39 L45 46 L55 46 L54 39 Z" fill="#e09060"/>
-    <!-- left arm swept up overhead (anjali) -->
-    <path d="M30 52 Q22 38 28 24 Q31 20 34 23 Q30 36 32 50 Z" fill="url(#sk9)"/>
-    <ellipse cx="30" cy="22" rx="4" ry="5" fill="#d4814e" transform="rotate(-20,30,22)"/>
-    <!-- right arm mirror -->
-    <path d="M70 52 Q78 38 72 24 Q69 20 66 23 Q70 36 68 50 Z" fill="url(#sk9)"/>
-    <ellipse cx="70" cy="22" rx="4" ry="5" fill="#d4814e" transform="rotate(20,70,22)"/>
-    <!-- hands at top nearly touching (namaste above head) -->
-    <path d="M28 22 Q30 18 36 20 Q34 24 30 24 Z" fill="#d4814e"/>
-    <path d="M72 22 Q70 18 64 20 Q66 24 70 24 Z" fill="#d4814e"/>
-    <!-- torso upright -->
-    <path d="M30 52 Q50 46 70 52 L69 84 Q58 90 50 90 Q42 90 31 84 Z" fill="url(#tp9)"/>
-    <path d="M50 52 L50 90 Q58 86 61 82 L62 52 Q56 48 50 52 Z" fill="rgba(0,0,0,0.1)"/>
-    <line x1="42" y1="50" x2="42" y2="60" stroke="rgba(255,255,255,0.22)" stroke-width="1.5" stroke-linecap="round"/>
-    <line x1="58" y1="50" x2="58" y2="60" stroke="rgba(255,255,255,0.22)" stroke-width="1.5" stroke-linecap="round"/>
-    <!-- hips -->
-    <path d="M31 84 Q42 94 50 94 Q58 94 69 84 L71 100 Q58 108 50 108 Q42 108 29 100 Z" fill="url(#lg9)"/>
-    <!-- legs close together -->
-    <path d="M35 102 L32 122 Q36 127 40 122 L43 104 Z" fill="url(#lg9)"/>
-    <ellipse cx="37" cy="116" rx="4" ry="3.5" fill="#353548"/>
-    <path d="M32 120 L31 127 Q35 129 40 127 L41 120 Z" fill="#1e1e2e"/>
-    <path d="M30 127 Q32 130 40 130 Q43 128 42 127 Z" fill="#d4814e"/>
-    <path d="M57 104 L60 122 Q64 127 68 122 L65 102 Z" fill="url(#lg9)"/>
-    <ellipse cx="63" cy="116" rx="4" ry="3.5" fill="#353548"/>
-    <path d="M60 120 L61 127 Q65 129 70 127 L69 120 Z" fill="#1e1e2e"/>
-    <path d="M60 127 Q62 130 70 130 Q73 128 72 127 Z" fill="#d4814e"/>
-    </svg>`
-  },
-  {
-    id:'y10', body:'full', title:"Warrior II", sub:"Iconic strength pose. Opens hips, builds leg endurance and sharpens focus.",
-    reps:"Hold 30s", sets:"3 sets", duration:240, difficulty:"Intermediate", color:"#7c6dff", tag:"Full Body",
-    svg:`<svg viewBox="0 0 100 130" xmlns="http://www.w3.org/2000/svg"><defs>
-      <linearGradient id="sk10" x1="0" y1="0" x2="1" y2="1"><stop offset="0%" stop-color="#f5c09a"/><stop offset="100%" stop-color="#d4814e"/></linearGradient>
-      <linearGradient id="tp10" x1="0" y1="0" x2="0" y2="1"><stop offset="0%" stop-color="#9b7aff"/><stop offset="100%" stop-color="#5030cc"/></linearGradient>
-      <linearGradient id="lg10" x1="0" y1="0" x2="0" y2="1"><stop offset="0%" stop-color="#28283a"/><stop offset="100%" stop-color="#14141f"/></linearGradient>
-    </defs>
-    <!-- warrior II front view, arms wide, deep lunge stance -->
-    <!-- hair in tight bun -->
-    <circle cx="50" cy="8" r="5.5" fill="#1c0d08"/>
-    <path d="M43 12 Q50 16 57 12" stroke="#1c0d08" stroke-width="4" fill="none" stroke-linecap="round"/>
-    <!-- head gazing left -->
-    <ellipse cx="50" cy="19" rx="9" ry="9.5" fill="url(#sk10)"/>
-    <ellipse cx="40" cy="19" rx="2.3" ry="2.8" fill="#d4814e"/>
-    <ellipse cx="60" cy="19" rx="2.3" ry="2.8" fill="#d4814e"/>
-    <!-- eyes gazing left -->
-    <ellipse cx="44" cy="17" rx="1.5" ry="1.7" fill="#2a1008"/>
-    <ellipse cx="51" cy="17" rx="1.5" ry="1.7" fill="#2a1008"/>
-    <!-- pupils shifted left (gaze direction) -->
-    <ellipse cx="43" cy="17" rx="0.7" ry="0.9" fill="#0a0402"/>
-    <ellipse cx="50" cy="17" rx="0.7" ry="0.9" fill="#0a0402"/>
-    <path d="M42 14 Q44 13 46 14" stroke="#2a1008" stroke-width="0.8" fill="none"/>
-    <path d="M49 14 Q51 13 53 14" stroke="#2a1008" stroke-width="0.8" fill="none"/>
-    <path d="M46 22 Q50 24 54 22" stroke="#c06040" stroke-width="1" fill="none" stroke-linecap="round"/>
-    <!-- neck -->
-    <path d="M46 27 L45 34 L55 34 L54 27 Z" fill="#e09060"/>
-    <!-- left arm fully extended to left -->
-    <path d="M28 42 Q16 44 6 46 Q4 49 7 52 Q16 49 28 47 Z" fill="url(#sk10)"/>
-    <ellipse cx="5" cy="49" rx="4.5" ry="3.5" fill="#d4814e" transform="rotate(-5,5,49)"/>
-    <!-- right arm fully extended to right -->
-    <path d="M72 42 Q84 44 94 46 Q96 49 93 52 Q84 49 72 47 Z" fill="url(#sk10)"/>
-    <ellipse cx="95" cy="49" rx="4.5" ry="3.5" fill="#d4814e" transform="rotate(5,95,49)"/>
-    <!-- torso upright -->
-    <path d="M28 42 Q50 36 72 42 L71 72 Q60 78 50 78 Q40 78 29 72 Z" fill="url(#tp10)"/>
-    <path d="M50 42 L50 78 Q58 74 62 70 L63 42 Q56 38 50 42 Z" fill="rgba(0,0,0,0.12)"/>
-    <line x1="42" y1="40" x2="42" y2="50" stroke="rgba(255,255,255,0.22)" stroke-width="1.5" stroke-linecap="round"/>
-    <line x1="58" y1="40" x2="58" y2="50" stroke="rgba(255,255,255,0.22)" stroke-width="1.5" stroke-linecap="round"/>
-    <!-- hips wide stance -->
-    <path d="M29 72 Q38 80 50 80 Q62 80 71 72 L73 88 Q60 96 50 96 Q40 96 27 88 Z" fill="url(#lg10)"/>
-    <!-- left leg bent (lunge left, knee over ankle) -->
-    <path d="M32 88 Q24 94 16 96 Q12 100 14 108 Q18 112 22 108 Q22 102 28 96 Q34 92 38 90 Z" fill="url(#lg10)"/>
-    <!-- left lower leg -->
-    <path d="M14 108 L12 124 Q16 128 22 124 L24 108 Z" fill="#1e1e2e"/>
-    <ellipse cx="18" cy="110" rx="5" ry="4" fill="#353548"/>
-    <!-- left foot -->
-    <path d="M10 124 Q12 129 22 129 Q25 127 25 124 Z" fill="#d4814e"/>
-    <!-- right leg straight (extended right) -->
-    <path d="M68 90 Q76 94 84 96 Q88 100 86 108 Q82 112 78 108 Q78 102 72 96 Q66 92 62 90 Z" fill="url(#lg10)"/>
-    <!-- right lower leg -->
-    <path d="M86 108 L88 124 Q84 128 78 124 L76 108 Z" fill="#1e1e2e"/>
-    <ellipse cx="82" cy="110" rx="5" ry="4" fill="#353548"/>
-    <!-- right foot -->
-    <path d="M76 124 Q78 129 88 129 Q90 127 89 124 Z" fill="#d4814e"/>
-    <!-- floor -->
-    <line x1="5" y1="130" x2="95" y2="130" stroke="rgba(124,109,255,0.2)" stroke-width="1"/>
-    </svg>`
-  },
-  {
-    id:'y11', body:'neck', title:"Eagle Arms", sub:"Wrapping arms deeply opens the upper back and rhomboids between shoulder blades.",
-    reps:"Hold 20s each side", sets:"3 sets", duration:120, difficulty:"Beginner", color:"#ff6b9d", tag:"Neck & Shoulders",
-    svg:`<svg viewBox="0 0 100 130" xmlns="http://www.w3.org/2000/svg"><defs>
-      <linearGradient id="sk11" x1="0" y1="0" x2="1" y2="1"><stop offset="0%" stop-color="#f5c09a"/><stop offset="100%" stop-color="#d4814e"/></linearGradient>
-      <linearGradient id="tp11" x1="0" y1="0" x2="0" y2="1"><stop offset="0%" stop-color="#ff8bb8"/><stop offset="100%" stop-color="#cc3870"/></linearGradient>
-      <linearGradient id="lg11" x1="0" y1="0" x2="0" y2="1"><stop offset="0%" stop-color="#28283a"/><stop offset="100%" stop-color="#14141f"/></linearGradient>
-    </defs>
-    <!-- eagle arms standing, arms crossed/wrapped, one leg freestanding or slight bend -->
-    <!-- hair bun -->
-    <circle cx="50" cy="8" r="6" fill="#1c0d08"/>
-    <path d="M43 12 Q50 16 57 12" stroke="#1c0d08" stroke-width="4" fill="none" stroke-linecap="round"/>
-    <!-- head slightly bowed (concentration) -->
-    <ellipse cx="50" cy="19" rx="9" ry="9.5" fill="url(#sk11)" transform="rotate(5,50,19)"/>
-    <ellipse cx="40" cy="20" rx="2.3" ry="2.8" fill="#d4814e"/>
-    <ellipse cx="60" cy="20" rx="2.3" ry="2.8" fill="#d4814e"/>
-    <ellipse cx="46" cy="18" rx="1.4" ry="1.7" fill="#2a1008"/>
-    <ellipse cx="54" cy="18" rx="1.4" ry="1.7" fill="#2a1008"/>
-    <path d="M44 15 Q46 14 48 15" stroke="#2a1008" stroke-width="0.8" fill="none"/>
-    <path d="M52 15 Q54 14 56 15" stroke="#2a1008" stroke-width="0.8" fill="none"/>
-    <path d="M47 22 Q50 24 53 22" stroke="#c06040" stroke-width="1" fill="none" stroke-linecap="round"/>
-    <!-- neck -->
-    <path d="M46 28 L45 35 L55 35 L54 28 Z" fill="#e09060"/>
-    <!-- torso -->
-    <path d="M28 38 Q50 32 72 38 L71 72 Q60 78 50 78 Q40 78 29 72 Z" fill="url(#tp11)"/>
-    <path d="M50 38 L50 78 Q58 74 62 70 L63 38 Q56 34 50 38 Z" fill="rgba(0,0,0,0.12)"/>
-    <!-- eagle arms: right arm under left, wrapped and crossed at elbow height -->
-    <!-- back arm (right goes under) -->
-    <path d="M68 44 Q60 42 48 46 Q44 50 46 56 Q52 52 60 50 Q66 48 70 46 Z" fill="#d4814e"/>
-    <!-- front arm (left wraps over right) -->
-    <path d="M32 44 Q40 42 52 46 Q56 50 54 56 Q48 52 40 50 Q34 48 30 46 Z" fill="url(#sk11)"/>
-    <!-- wrapped forearms going up -->
-    <path d="M46 56 Q44 48 46 40 Q48 36 52 38 Q50 46 50 54 Z" fill="#d4814e"/>
-    <path d="M54 56 Q56 48 54 40 Q52 36 48 38 Q50 46 50 54 Z" fill="url(#sk11)"/>
-    <!-- hands clasped/fingers at top -->
-    <ellipse cx="50" cy="38" rx="7" ry="5" fill="url(#sk11)" transform="rotate(10,50,38)"/>
-    <ellipse cx="50" cy="38" rx="5" ry="4" fill="#e09060"/>
-    <!-- slight background arm definition -->
-    <path d="M50 54 Q44 58 40 56" stroke="#c07848" stroke-width="2" fill="none" stroke-linecap="round"/>
-    <path d="M50 54 Q56 58 60 56" stroke="#d4814e" stroke-width="2" fill="none" stroke-linecap="round"/>
-    <!-- leggings hips -->
-    <path d="M29 72 Q40 82 50 82 Q60 82 71 72 L73 88 Q60 96 50 96 Q40 96 27 88 Z" fill="url(#lg11)"/>
-    <!-- left leg slight bend (eagle balance optional) -->
-    <path d="M33 90 L30 118 Q34 123 39 118 L42 92 Z" fill="url(#lg11)"/>
-    <ellipse cx="35" cy="112" rx="5" ry="4" fill="#353548"/>
-    <path d="M29 116 L28 127 Q32 130 38 127 L39 116 Z" fill="#1e1e2e"/>
-    <path d="M27 127 Q30 130 38 130 Q41 128 40 127 Z" fill="#d4814e"/>
-    <!-- right leg straight -->
-    <path d="M58 92 L62 118 Q66 123 71 118 L67 90 Z" fill="url(#lg11)"/>
-    <ellipse cx="65" cy="112" rx="5" ry="4" fill="#353548"/>
-    <path d="M62 116 L63 127 Q67 130 73 127 L72 116 Z" fill="#1e1e2e"/>
-    <path d="M62 127 Q64 130 72 130 Q75 128 74 127 Z" fill="#d4814e"/>
-    <!-- stretch indicator -->
-    <path d="M42 46 Q50 44 58 46" stroke="rgba(0,229,192,0.7)" stroke-width="1.6" fill="none" stroke-dasharray="3 2" stroke-linecap="round"/>
-    </svg>`
-  },
-  {
-    id:'y12', body:'hip', title:"Pigeon Pose", sub:"Intense hip opener. Releases sciatic nerve tension and deep glute tightness.",
-    reps:"Hold 60s each side", sets:"2 sets", duration:240, difficulty:"Advanced", color:"#4cde80", tag:"Hips & Legs",
-    svg:`<svg viewBox="0 0 100 130" xmlns="http://www.w3.org/2000/svg"><defs>
-      <linearGradient id="sk12" x1="0" y1="0" x2="1" y2="1"><stop offset="0%" stop-color="#f5c09a"/><stop offset="100%" stop-color="#d4814e"/></linearGradient>
-      <linearGradient id="tp12" x1="0" y1="0" x2="0" y2="1"><stop offset="0%" stop-color="#5ef09a"/><stop offset="100%" stop-color="#20a050"/></linearGradient>
-      <linearGradient id="lg12" x1="0" y1="0" x2="0" y2="1"><stop offset="0%" stop-color="#28283a"/><stop offset="100%" stop-color="#14141f"/></linearGradient>
-    </defs>
-    <!-- pigeon pose, side view, front leg bent across, back leg extended, torso upright -->
-    <!-- hair flowing -->
-    <path d="M62 14 Q70 20 68 30 Q64 34 60 26 Q64 22 62 16 Z" fill="#1c0d08"/>
-    <!-- head profile right -->
-    <ellipse cx="66" cy="18" rx="9" ry="9.5" fill="url(#sk12)"/>
-    <ellipse cx="76" cy="18" rx="2.3" ry="2.8" fill="#d4814e"/>
-    <ellipse cx="68" cy="15" rx="1.3" ry="1.6" fill="#2a1008"/>
-    <path d="M65 12 Q68 11 71 12" stroke="#2a1008" stroke-width="0.8" fill="none"/>
-    <path d="M67 21 Q70 23 73 21" stroke="#c06040" stroke-width="1" fill="none" stroke-linecap="round"/>
-    <!-- neck -->
-    <path d="M62 26 Q60 32 60 36 L66 36 Q65 31 64 26 Z" fill="#e09060"/>
-    <!-- right arm alongside body -->
-    <path d="M66 44 Q72 52 76 64 Q74 68 70 65 Q68 54 64 46 Z" fill="url(#sk12)"/>
-    <ellipse cx="72" cy="66" rx="3.5" ry="4" fill="#d4814e"/>
-    <!-- left arm to the side -->
-    <path d="M46 44 Q38 50 34 62 Q36 66 40 63 Q42 52 48 46 Z" fill="#d4814e"/>
-    <ellipse cx="36" cy="63" rx="3.5" ry="4" fill="#c07848"/>
-    <!-- torso upright -->
-    <path d="M46 40 Q58 34 70 40 L68 76 Q58 82 50 80 Q44 78 45 74 Z" fill="url(#tp12)"/>
-    <path d="M58 38 L58 82 Q64 78 66 74 L68 38 Q63 36 58 38 Z" fill="rgba(0,0,0,0.12)"/>
-    <line x1="50" y1="38" x2="50" y2="48" stroke="rgba(255,255,255,0.22)" stroke-width="1.5" stroke-linecap="round"/>
-    <line x1="64" y1="38" x2="64" y2="48" stroke="rgba(255,255,255,0.22)" stroke-width="1.5" stroke-linecap="round"/>
-    <!-- hips/glutes sitting on floor -->
-    <ellipse cx="52" cy="84" rx="18" ry="10" fill="url(#lg12)"/>
-    <!-- front leg (left leg) bent across -- shin on floor going left -->
-    <path d="M38 86 Q28 88 18 86 Q12 88 12 96" stroke="url(#lg12)" stroke-width="9" fill="none" stroke-linecap="round"/>
-    <!-- front leg foot/shin at an angle -->
-    <ellipse cx="14" cy="90" rx="5" ry="4" fill="#353548"/>
-    <path d="M10 94 Q12 100 20 100 Q22 96 18 92 Z" fill="url(#sk12)"/>
-    <!-- back leg straight extended to the right on floor -->
-    <path d="M66 86 Q78 84 90 82 Q95 84 94 92" stroke="#252538" stroke-width="9" fill="none" stroke-linecap="round"/>
-    <path d="M68 90 Q80 88 92 86 Q97 88 96 96" stroke="#1e1e2e" stroke-width="6" fill="none" stroke-linecap="round"/>
-    <!-- back foot -->
-    <path d="M92 92 Q98 90 98 98 Q94 104 90 98 Z" fill="#d4814e"/>
-    <!-- floor / mat -->
-    <line x1="2" y1="100" x2="98" y2="100" stroke="rgba(76,222,128,0.2)" stroke-width="1"/>
-    <!-- hip stretch indicator -->
-    <path d="M40 90 Q50 96 60 90" stroke="rgba(0,229,192,0.65)" stroke-width="1.6" fill="none" stroke-dasharray="3 2" stroke-linecap="round"/>
-    <circle cx="50" cy="93" r="2" fill="rgba(0,229,192,0.6)"/>
-    </svg>`
-  },
-  {
-    id:'y13', body:'back', title:"Cobra Pose", sub:"Opens the chest and strengthens the spine. Great for counteracting slouching.",
-    reps:"Hold 30s", sets:"3 sets", duration:120, difficulty:"Beginner", color:"#00e5c0", tag:"Back & Spine",
-    svg:`<svg viewBox="0 0 100 130" xmlns="http://www.w3.org/2000/svg"><defs>
-      <linearGradient id="sk13" x1="0" y1="0" x2="1" y2="1"><stop offset="0%" stop-color="#f5c09a"/><stop offset="100%" stop-color="#d4814e"/></linearGradient>
-      <linearGradient id="tp13" x1="0" y1="0" x2="0" y2="1"><stop offset="0%" stop-color="#00e5c0"/><stop offset="100%" stop-color="#00a88a"/></linearGradient>
-    </defs>
-    <!-- figure prone with chest lifted, arms straight -->
-    <!-- hair -->
-    <path d="M12 28 Q18 20 28 22 Q24 30 16 34 Z" fill="#1c0d08"/>
-    <!-- head tilted back -->
-    <ellipse cx="22" cy="24" rx="9" ry="9.5" fill="url(#sk13)" transform="rotate(-20,22,24)"/>
-    <!-- face -->
-    <ellipse cx="30" cy="22" rx="1.5" ry="1.8" fill="#2a1008"/>
-    <path d="M28 18 Q32 17 35 19" stroke="#2a1008" stroke-width="0.8" fill="none"/>
-    <path d="M26 31 Q30 33 34 30" stroke="#c06040" stroke-width="1" fill="none"/>
-    <!-- neck -->
-    <path d="M28 32 L34 40 L44 38 L38 30 Z" fill="#e09060"/>
-    <!-- torso arched up -->
-    <path d="M38 40 Q55 35 75 45 Q88 55 92 80" stroke="url(#tp13)" stroke-width="12" fill="none" stroke-linecap="round"/>
-    <path d="M38 42 Q55 37 75 47 Q88 57 92 82" stroke="rgba(255,255,255,0.12)" stroke-width="5" fill="none" stroke-linecap="round"/>
-    <!-- arms (supports) -->
-    <path d="M38 40 L34 78 Q36 82 40 82 L44 42 Z" fill="url(#sk13)"/>
-    <ellipse cx="37" cy="80" rx="5" ry="3" fill="#d4814e" transform="rotate(-5,37,80)"/>
-    <!-- legs flat on floor -->
-    <path d="M72 75 Q85 80 96 82" stroke="#28283a" stroke-width="10" fill="none" stroke-linecap="round"/>
-    <path d="M96 82 L98 88 Q95 92 92 88 Z" fill="url(#sk13)"/>
-    <!-- floor -->
-    <line x1="10" y1="85" x2="98" y2="85" stroke="rgba(255,255,255,0.1)" stroke-width="1"/>
-    </svg>`
-  },
-  {
-    id:'y14', body:'full', title:"Downward Dog", sub:"The fundamental yoga transition. Stretches hamstrings, calves, and shoulders.",
-    reps:"Hold 45s", sets:"3 sets", duration:180, difficulty:"Beginner", color:"#7c6dff", tag:"Full Body",
-    svg:`<svg viewBox="0 0 100 130" xmlns="http://www.w3.org/2000/svg"><defs>
-      <linearGradient id="sk14" x1="0" y1="0" x2="1" y2="1"><stop offset="0%" stop-color="#f5c09a"/><stop offset="100%" stop-color="#d4814e"/></linearGradient>
-      <linearGradient id="lg14" x1="0" y1="0" x2="0" y2="1"><stop offset="0%" stop-color="#28283a"/><stop offset="100%" stop-color="#14141f"/></linearGradient>
-    </defs>
-    <!-- Inverted V shape -->
-    <!-- hair hanging down -->
-    <path d="M22 84 Q16 88 12 84 Q14 78 20 78 Z" fill="#1c0d08"/>
-    <!-- head between arms -->
-    <ellipse cx="20" cy="82" rx="8" ry="8.5" fill="url(#sk14)" transform="rotate(30,20,82)"/>
-    <!-- back/torso line -->
-    <path d="M26 78 Q45 50 55 35" stroke="#7c6dff" stroke-width="10" fill="none" stroke-linecap="round"/>
-    <path d="M26 80 Q45 52 55 37" stroke="rgba(255,255,255,0.1)" stroke-width="4" fill="none" stroke-linecap="round"/>
-    <!-- arms reaching forward -->
-    <path d="M26 78 L8 98 Q6 102 10 104 L28 82 Z" fill="url(#sk14)"/>
-    <ellipse cx="9" cy="101" rx="4" ry="3" fill="#d4814e" transform="rotate(25,9,101)"/>
-    <!-- hips (apex of V) -->
-    <ellipse cx="55" cy="35" rx="10" ry="9" fill="url(#lg14)" transform="rotate(-30,55,35)"/>
-    <!-- legs reaching back -->
-    <path d="M55 35 L88 98 Q92 102 88 104 L55 45 Z" fill="url(#lg14)"/>
-    <!-- feet -->
-    <path d="M88 104 L94 106 Q92 110 86 108 L84 104 Z" fill="url(#sk14)"/>
-    <!-- floor -->
-    <line x1="5" y1="110" x2="95" y2="110" stroke="rgba(255,255,255,0.1)" stroke-width="1"/>
-    </svg>`
-  },
-  {
-    id:'y15', body:'hip', title:"Extended Triangle", sub:"Deep side stretch that strengthens the legs and improves core stability.",
-    reps:"30s each side", sets:"3 sets", duration:210, difficulty:"Intermediate", color:"#ff6b9d", tag:"Hips & Legs",
-    svg:`<svg viewBox="0 0 100 130" xmlns="http://www.w3.org/2000/svg"><defs>
-      <linearGradient id="sk15" x1="0" y1="0" x2="1" y2="1"><stop offset="0%" stop-color="#f5c09a"/><stop offset="100%" stop-color="#d4814e"/></linearGradient>
-      <linearGradient id="tp15" x1="0" y1="0" x2="0" y2="1"><stop offset="0%" stop-color="#ff8bb8"/><stop offset="100%" stop-color="#cc3870"/></linearGradient>
-    </defs>
-    <!-- torso tilted sideways -->
-    <!-- hair -->
-    <circle cx="62" cy="12" r="5" fill="#1c0d08"/>
-    <!-- head looking up -->
-    <ellipse cx="62" cy="22" rx="9" ry="9.5" fill="url(#sk15)" transform="rotate(-15,62,22)"/>
-    <!-- torso tilted -->
-    <path d="M35 80 Q45 65 65 55 L85 25" stroke="url(#tp15)" stroke-width="11" fill="none" stroke-linecap="round"/>
-    <!-- top arm reaching up -->
-    <path d="M65 55 L82 12 Q85 8 88 10 L72 58 Z" fill="url(#sk15)"/>
-    <ellipse cx="85" cy="11" rx="4" ry="5" fill="#d4814e" transform="rotate(30,85,11)"/>
-    <!-- bottom arm reaching down -->
-    <path d="M45 68 L25 105 Q22 108 28 108 L48 72 Z" fill="url(#sk15)"/>
-    <ellipse cx="25" cy="106" rx="5" ry="3" fill="#d4814e" transform="rotate(-10,25,106)"/>
-    <!-- wide legs -->
-    <path d="M35 80 L18 118 Q22 122 26 118 L43 85 Z" fill="#28283a"/>
-    <path d="M50 80 L78 118 Q82 122 86 118 L58 85 Z" fill="#14141f"/>
-    <!-- floor -->
-    <line x1="5" y1="124" x2="95" y2="124" stroke="rgba(255,255,255,0.1)" stroke-width="1"/>
-    </svg>`
-  },
-  {
-    id:'y16', body:'core', title:"Tree Pose", sub:"A signature balance post. Improves concentration and strengthens the ankles.",
-    reps:"45s each side", sets:"2 sets", duration:180, difficulty:"Beginner", color:"#ffb347", tag:"Core",
-    svg:`<svg viewBox="0 0 100 130" xmlns="http://www.w3.org/2000/svg"><defs>
-      <linearGradient id="sk16" x1="0" y1="0" x2="1" y2="1"><stop offset="0%" stop-color="#f5c09a"/><stop offset="100%" stop-color="#d4814e"/></linearGradient>
-      <linearGradient id="tp16" x1="0" y1="0" x2="0" y2="1"><stop offset="0%" stop-color="#ffca6a"/><stop offset="100%" stop-color="#d4882a"/></linearGradient>
-    </defs>
-    <!-- standing on one leg, hands in namaste -->
-    <!-- hair -->
-    <circle cx="50" cy="8" r="6" fill="#1c0d08"/>
-    <!-- head -->
-    <ellipse cx="50" cy="18" rx="9" ry="9.5" fill="url(#sk16)"/>
-    <!-- torso -->
-    <path d="M35 35 Q50 30 65 35 L62 70 Q50 75 38 70 Z" fill="url(#tp16)"/>
-    <!-- arms in namaste -->
-    <path d="M35 35 Q45 45 50 55 Q55 45 65 35" stroke="url(#sk16)" stroke-width="4" fill="none" stroke-linecap="round"/>
-    <circle cx="50" cy="55" r="5" fill="#d4814e"/>
-    <!-- standing leg -->
-    <path d="M42 70 L48 118 Q52 122 56 118 L58 70 Z" fill="#28283a"/>
-    <!-- bent leg -->
-    <path d="M42 70 Q45 80 50 90 L40 100 Q36 98 38 92 L46 80 Z" fill="#14141f" transform="rotate(-30,42,70)"/>
-    <path d="M50 82 Q55 86 65 82 Q68 84 66 88 L52 92 Z" fill="url(#sk16)" transform="rotate(-20,50,82)"/>
-    <!-- foot on floor -->
-    <path d="M46 120 Q50 125 58 125 Q62 122 58 120 Z" fill="url(#sk16)"/>
-    <!-- floor -->
-    <line x1="20" y1="128" x2="80" y2="128" stroke="rgba(255,255,255,0.1)" stroke-width="1"/>
-    </svg>`
-  },
-  {
-    id:'y17', body:'full', title:"Warrior I", sub:"Builds power and focuses the mind. Strengthens the legs, back, and arms.",
-    reps:"Hold 30s each side", sets:"3 sets", duration:240, difficulty:"Intermediate", color:"#7c6dff", tag:"Full Body",
-    svg:`<svg viewBox="0 0 100 130" xmlns="http://www.w3.org/2000/svg"><defs>
-      <linearGradient id="sk17" x1="0" y1="0" x2="1" y2="1"><stop offset="0%" stop-color="#f5c09a"/><stop offset="100%" stop-color="#d4814e"/></linearGradient>
-      <linearGradient id="tp17" x1="0" y1="0" x2="0" y2="1"><stop offset="0%" stop-color="#b8a7ff"/><stop offset="100%" stop-color="#7c6dff"/></linearGradient>
-    </defs>
-    <!-- lunging forward, arms up -->
-    <!-- hair -->
-    <circle cx="62" cy="7" r="6" fill="#1c0d08"/>
-    <!-- head -->
-    <ellipse cx="60" cy="18" rx="9" ry="9.5" fill="url(#sk17)"/>
-    <!-- arms raised -->
-    <path d="M52 35 L48 10 Q52 5 56 10 L60 35 Z" fill="url(#sk17)"/>
-    <path d="M68 35 L72 10 Q76 5 80 10 L76 35 Z" fill="url(#sk17)"/>
-    <circle cx="52" cy="8" r="4" fill="#d4814e"/>
-    <circle cx="76" cy="8" r="4" fill="#d4814e"/>
-    <!-- torso -->
-    <path d="M42 38 Q58 32 74 38 L72 72 Q58 78 44 72 Z" fill="url(#tp17)"/>
-    <!-- front leg bent -->
-    <path d="M44 72 Q35 85 28 95 L24 118 Q28 122 32 118 L36 95 Z" fill="#28283a"/>
-    <!-- back leg straight -->
-    <path d="M72 72 L88 118 Q92 122 96 118 L80 72 Z" fill="#14141f"/>
-    <!-- feet -->
-    <path d="M22 118 Q24 125 32 125 Q35 122 34 118 Z" fill="url(#sk17)"/>
-    <path d="M92 118 Q94 125 102 125 Q105 122 104 118 Z" fill="url(#sk17)"/>
-    <!-- floor -->
-    <line x1="5" y1="126" x2="95" y2="126" stroke="rgba(255,255,255,0.1)" stroke-width="1"/>
-    </svg>`
-  },
-  {
-    id:'y18', body:'core', title:"Forearm Plank", sub:"Variation of the plank that places more focus on the core and shoulders.",
-    reps:"Hold 45s", sets:"3 sets", duration:210, difficulty:"Intermediate", color:"#ff6b9d", tag:"Core",
-    svg:`<svg viewBox="0 0 100 130" xmlns="http://www.w3.org/2000/svg"><defs>
-      <linearGradient id="sk18" x1="0" y1="0" x2="1" y2="1"><stop offset="0%" stop-color="#f5c09a"/><stop offset="100%" stop-color="#d4814e"/></linearGradient>
-      <linearGradient id="tp18" x1="0" y1="0" x2="0" y2="1"><stop offset="0%" stop-color="#ff8bb8"/><stop offset="100%" stop-color="#cc3870"/></linearGradient>
-    </defs>
-    <!-- horizontal body, forearms on ground -->
-    <!-- hair -->
-    <path d="M70 38 Q78 44 80 52 Z" fill="#1c0d08"/>
-    <!-- head -->
-    <ellipse cx="78" cy="38" rx="9" ry="9.5" fill="url(#sk18)"/>
-    <!-- body line -->
-    <path d="M78 45 Q50 48 20 62" stroke="url(#tp18)" stroke-width="12" fill="none" stroke-linecap="round"/>
-    <!-- forearms -->
-    <path d="M65 52 L55 82 Q58 85 62 82 L72 52 Z" fill="url(#sk18)"/>
-    <ellipse cx="58" cy="82" rx="6" ry="3" fill="#d4814e" transform="rotate(-15,58,82)"/>
-    <!-- legs -->
-    <path d="M30 60 L12 85 Q14 88 18 85 L36 62 Z" fill="#28283a"/>
-    <!-- toes -->
-    <path d="M10 84 Q12 88 18 88 Q20 86 18 84 Z" fill="url(#sk18)"/>
-    <!-- floor -->
-    <line x1="5" y1="88" x2="95" y2="88" stroke="rgba(255,255,255,0.1)" stroke-width="1"/>
-    </svg>`
-  },
-  {
-    id:'y19', body:'hip', title:"Happy Baby", sub:"A gentle hip opener that also massages the lower back and releases the spine.",
-    reps:"Hold 60s", sets:"2 sets", duration:150, difficulty:"Beginner", color:"#4cde80", tag:"Hips & Legs",
-    svg:`<svg viewBox="0 0 100 130" xmlns="http://www.w3.org/2000/svg"><defs>
-      <linearGradient id="sk19" x1="0" y1="0" x2="1" y2="1"><stop offset="0%" stop-color="#f5c09a"/><stop offset="100%" stop-color="#d4814e"/></linearGradient>
-      <linearGradient id="tp19" x1="0" y1="0" x2="0" y2="1"><stop offset="0%" stop-color="#5ef09a"/><stop offset="100%" stop-color="#28b060"/></linearGradient>
-    </defs>
-    <!-- lying on back, holding feet -->
-    <!-- hair on floor -->
-    <path d="M40 90 Q50 98 60 90 Z" fill="#1c0d08"/>
-    <!-- head -->
-    <ellipse cx="50" cy="80" rx="9" ry="9.5" fill="url(#sk19)"/>
-    <!-- torso -->
-    <path d="M35 55 Q50 70 65 55 L70 80 Q50 85 30 80 Z" fill="url(#tp19)"/>
-    <!-- legs up and bent -->
-    <path d="M35 55 Q20 40 15 25 Q10 20 18 18 Q25 22 28 35" stroke="#28283a" stroke-width="8" fill="none" stroke-linecap="round"/>
-    <path d="M65 55 Q80 40 85 25 Q90 20 82 18 Q75 22 72 35" stroke="#14141f" stroke-width="8" fill="none" stroke-linecap="round"/>
-    <!-- feet -->
-    <path d="M14 16 Q18 12 24 16 Q22 20 18 18 Z" fill="url(#sk19)"/>
-    <path d="M86 16 Q82 12 76 16 Q78 20 82 18 Z" fill="url(#sk19)"/>
-    <!-- hands reaching up -->
-    <path d="M35 55 L16 18" stroke="url(#sk19)" stroke-width="3" fill="none"/>
-    <path d="M65 55 L84 18" stroke="url(#sk19)" stroke-width="3" fill="none"/>
-    </svg>`
-  },
-  {
-    id:'y20', body:'full', title:"Corpse Pose", sub:"Savasana: The ultimate restoration. Calms the mind and integrates the benefits of practice.",
-    reps:"Hold 5-10 mins", sets:"1 set", duration:300, difficulty:"Beginner", color:"#fff", tag:"Full Body",
-    svg:`<svg viewBox="0 0 100 130" xmlns="http://www.w3.org/2000/svg"><defs>
-      <linearGradient id="sk20" x1="0" y1="0" x2="1" y2="1"><stop offset="0%" stop-color="#f5c09a"/><stop offset="100%" stop-color="#d4814e"/></linearGradient>
-    </defs>
-    <!-- lying flat on back -->
-    <!-- hair -->
-    <path d="M40 25 Q50 18 60 25 Z" fill="#1c0d08"/>
-    <!-- head -->
-    <ellipse cx="50" cy="35" rx="9" ry="9.5" fill="url(#sk20)"/>
-    <!-- body -->
-    <path d="M40 45 Q50 48 60 45 L58 110 Q50 115 42 110 Z" fill="#28283a"/>
-    <!-- arms at sides -->
-    <path d="M38 50 L25 85 Q28 88 32 85 L42 55 Z" fill="url(#sk20)"/>
-    <path d="M62 50 L75 85 Q72 88 68 85 L58 55 Z" fill="url(#sk20)"/>
-    <!-- feet falling open -->
-    <path d="M38 110 L30 120 Q34 124 38 122 Z" fill="url(#sk20)"/>
-    <path d="M62 110 L70 120 Q66 124 62 122 Z" fill="url(#sk20)"/>
-    <!-- floor -->
-    <line x1="10" y1="125" x2="90" y2="125" stroke="rgba(255,255,255,0.05)" stroke-width="1"/>
-    </svg>`
-  },
+  { id:'y1', body:'neck', title:"Neck Rolls", sub:"Release screen-time tension.", reps:"8 reps", duration:120, difficulty:"Beginner", tag:"Neck", img:"https://images.unsplash.com/photo-1544367567-0f2fcb009e0b?auto=format&fit=crop&w=400&q=80" },
+  { id:'y2', body:'neck', title:"Shoulder Shrugs", sub:"Melt trapezius tension.", reps:"12 reps", duration:90, difficulty:"Beginner", tag:"Neck", img:"https://images.unsplash.com/photo-1552196564-972b22ec30bb?auto=format&fit=crop&w=400&q=80" },
+  { id:'y3', body:'back', title:"Cat-Cow Stretch", sub:"Spinal mobilization.", reps:"10 cycles", duration:180, difficulty:"Beginner", tag:"Back", img:"https://images.unsplash.com/photo-1566730623145-886ec0d8ae8a?auto=format&fit=crop&w=400&q=80" },
+  { id:'y4', body:'back', title:"Child's Pose", sub:"Deeply restful stretch.", reps:"Hold 30s", duration:150, difficulty:"Beginner", tag:"Back", img:"https://images.unsplash.com/photo-1599447292180-45fd880c72f2?auto=format&fit=crop&w=400&q=80" },
+  { id:'y5', body:'hip', title:"Butterfly Pose", sub:"Opens hips and groin.", reps:"Hold 45s", duration:120, difficulty:"Beginner", tag:"Hips", img:"https://images.unsplash.com/photo-1575052814086-f385e2e2ad1b?auto=format&fit=crop&w=400&q=80" },
+  { id:'y6', body:'hip', title:"Low Lunge", sub:"Deep hip flexor stretch.", reps:"30s/side", duration:180, difficulty:"Intermediate", tag:"Hips", img:"https://images.unsplash.com/photo-1506126613408-eca07ce68773?auto=format&fit=crop&w=400&q=80" },
+  { id:'y7', body:'core', title:"Plank Hold", sub:"Core endurance.", reps:"30-60s", duration:210, difficulty:"Intermediate", tag:"Core", img:"https://images.unsplash.com/photo-1571019613454-1cb2f99b2d8b?auto=format&fit=crop&w=400&q=80" },
+  { id:'y8', body:'core', title:"Boat Pose", sub:"Abdominal strengthener.", reps:"20s", duration:150, difficulty:"Advanced", tag:"Core", img:"https://images.unsplash.com/photo-1518310383802-640c2de311b2?auto=format&fit=crop&w=400&q=80" },
+  { id:'y9', body:'full', title:"Sun Salutation", sub:"Classic warm-up flow.", reps:"6 rounds", duration:300, difficulty:"All Levels", tag:"Full Body", img:"https://images.unsplash.com/photo-1508700115892-45ecd05ae2ad?auto=format&fit=crop&w=400&q=80" },
+  { id:'y10', body:'full', title:"Warrior II", sub:"Strength and focus.", reps:"Hold 30s", duration:240, difficulty:"Intermediate", tag:"Full Body", img:"https://images.unsplash.com/photo-1544367567-0f2fcb009e0b?auto=format&fit=crop&w=400&q=80" },
+  { id:'y11', body:'full', title:"Tree Pose", sub:"Balance and poise.", reps:"30s/side", duration:120, difficulty:"Beginner", tag:"Balance", img:"https://images.unsplash.com/photo-1506126613408-eca07ce68773?auto=format&fit=crop&w=400&q=80" },
+  { id:'y12', body:'back', title:"Cobra Pose", sub:"Spinal extension.", reps:"Hold 30s", duration:120, difficulty:"Beginner", tag:"Back", img:"https://images.unsplash.com/photo-1593164841882-78d1f0565062?auto=format&fit=crop&w=400&q=80" },
+  { id:'y13', body:'full', title:"Downward Dog", sub:"Full body stretch.", reps:"Hold 30s", duration:120, difficulty:"Beginner", tag:"Full Body", img:"https://images.unsplash.com/photo-1599447421416-3414500d18a5?auto=format&fit=crop&w=400&q=80" },
+  { id:'y14', body:'full', title:"Triangle Pose", sub:"Side body lateral stretch.", reps:"30s/side", duration:180, difficulty:"Intermediate", tag:"Full Body", img:"https://images.unsplash.com/photo-1510894347713-fc3ad6cb0322?auto=format&fit=crop&w=400&q=80" },
+  { id:'y15', body:'full', title:"Warrior I", sub:"Foundational strength.", reps:"Hold 30s", duration:180, difficulty:"Beginner", tag:"Full Body", img:"https://images.unsplash.com/photo-1544367567-0f2fcb009e0b?auto=format&fit=crop&w=400&q=80" },
+  { id:'y16', body:'full', title:"Bridge Pose", sub:"Glute and back opener.", reps:"Hold 30s", duration:120, difficulty:"Beginner", tag:"Back", img:"https://images.unsplash.com/photo-1599447421416-3414500d18a5?auto=format&fit=crop&w=400&q=80" },
+  { id:'y17', body:'hip', title:"Pigeon Pose", sub:"Deep hip opener.", reps:"1m/side", duration:240, difficulty:"Advanced", tag:"Hips", img:"https://images.unsplash.com/photo-1575052814086-f385e2e2ad1b?auto=format&fit=crop&w=400&q=80" },
+  { id:'y18', body:'core', title:"Side Plank", sub:"Oblique strength.", reps:"30s/side", duration:180, difficulty:"Intermediate", tag:"Core", img:"https://images.unsplash.com/photo-1571019613454-1cb2f99b2d8b?auto=format&fit=crop&w=400&q=80" },
+  { id:'y19', body:'full', title:"Corpse Pose", sub:"Ultimate restoration.", reps:"5-10 mins", duration:300, difficulty:"Beginner", tag:"Relax", img:"https://images.unsplash.com/photo-1544367567-0f2fcb009e0b?auto=format&fit=crop&w=400&q=80" },
+  { id:'y20', body:'full', title:"Mountain Pose", sub:"Posture and focus.", reps:"Hold 1m", duration:300, difficulty:"Beginner", tag:"Posture", img:"https://images.unsplash.com/photo-1506126613408-eca07ce68773?auto=format&fit=crop&w=400&q=80" },
+  { id:'y21', body:'full', title:"Eagle Pose", sub:"Internal focus.", reps:"30s/side", duration:180, difficulty:"Intermediate", tag:"Balance", img:"https://images.unsplash.com/photo-1544367567-0f2fcb009e0b?auto=format&fit=crop&w=400&q=80" },
+  { id:'y22', body:'full', title:"Wheel Pose", sub:"Powerful backbend.", reps:"Hold 15s", duration:120, difficulty:"Advanced", tag:"Back", img:"https://images.unsplash.com/photo-1599447421416-3414500d18a5?auto=format&fit=crop&w=400&q=80" },
+  { id:'y23', body:'full', title:"Crow Pose", sub:"Arm balance challenge.", reps:"Hold 15s", duration:120, difficulty:"Advanced", tag:"Balance", img:"https://images.unsplash.com/photo-1510894347713-fc3ad6cb0322?auto=format&fit=crop&w=400&q=80" },
+  { id:'y24', body:'full', title:"Camel Pose", sub:"Chest expander.", reps:"Hold 30s", duration:120, difficulty:"Intermediate", tag:"Back", img:"https://images.unsplash.com/photo-1593164841882-78d1f0565062?auto=format&fit=crop&w=400&q=80" },
+  { id:'y25', body:'full', title:"Extended Side Angle", sub:"Leg and side strength.", reps:"30s/side", duration:180, difficulty:"Intermediate", tag:"Full Body", img:"https://images.unsplash.com/photo-1544367567-0f2fcb009e0b?auto=format&fit=crop&w=400&q=80" },
+  { id:'y26', body:'full', title:"Pyramid Pose", sub:"Hamstring stretch.", reps:"30s/side", duration:120, difficulty:"Intermediate", tag:"Legs", img:"https://images.unsplash.com/photo-1510894347713-fc3ad6cb0322?auto=format&fit=crop&w=400&q=80" },
+  { id:'y27', body:'full', title:"Half Moon Pose", sub:"Advanced balance.", reps:"20s/side", duration:120, difficulty:"Advanced", tag:"Balance", img:"https://images.unsplash.com/photo-1506126613408-eca07ce68773?auto=format&fit=crop&w=400&q=80" },
+  { id:'y28', body:'full', title:"Chair Pose", sub:"Powerful standing pose.", reps:"Hold 30s", duration:120, difficulty:"Beginner", tag:"Full Body", img:"https://images.unsplash.com/photo-1544367567-0f2fcb009e0b?auto=format&fit=crop&w=400&q=80" },
+  { id:'y29', body:'full', title:"Lizard Pose", sub:"Deep hip and groin.", reps:"30s/side", duration:180, difficulty:"Advanced", tag:"Hips", img:"https://images.unsplash.com/photo-1575052814086-f385e2e2ad1b?auto=format&fit=crop&w=400&q=80" },
+  { id:'y30', body:'full', title:"Dolphin Pose", sub:"Shoulder strength.", reps:"Hold 30s", duration:120, difficulty:"Intermediate", tag:"Shoulders", img:"https://images.unsplash.com/photo-1599447421416-3414500d18a5?auto=format&fit=crop&w=400&q=80" },
+  { id:'y31', body:'full', title:"Revolved Triangle", sub:"Twisting hamstrings.", reps:"20s/side", duration:120, difficulty:"Advanced", tag:"Full Body", img:"https://images.unsplash.com/photo-1510894347713-fc3ad6cb0322?auto=format&fit=crop&w=400&q=80" },
+  { id:'y32', body:'full', title:"Seated Twist", sub:"Spinal detox twist.", reps:"30s/side", duration:120, difficulty:"Beginner", tag:"Back", img:"https://images.unsplash.com/photo-1593164841882-78d1f0565062?auto=format&fit=crop&w=400&q=80" }
 ];
 
 let yogaFilter='all', activeYogaTimer=null, yogaTimerRunning=false;
@@ -2514,30 +1827,29 @@ function filterYoga(filter, btn){
 }
 function renderYoga(){
   const grid=document.getElementById('yogaGrid');grid.innerHTML='';
-  const poses=(yogaFilter==='all')?YOGA_DATA:YOGA_DATA.filter(p=>p.body===yogaFilter);
+  const poses=(yogaFilter==='all')?YOGA_DATA:YOGA_DATA.filter(p=>p.tag.toLowerCase().includes(yogaFilter.toLowerCase()) || p.body.toLowerCase().includes(yogaFilter.toLowerCase()));
   poses.forEach(p=>{
     const card=document.createElement('div');card.className='yoga-card';card.id='yc-'+p.id;
     card.innerHTML=`
-      <div class="yoga-illus" style="background:linear-gradient(135deg,${p.color}18,${p.color}08)">${p.svg}</div>
+      <div class="yoga-illus" style="background:url('${p.img}') center/cover no-repeat; border-radius:12px 12px 0 0; height:180px"></div>
       <div class="yoga-info">
         <div class="yoga-title">${p.title}</div>
         <div class="yoga-sub">${p.sub}</div>
         <div class="yoga-meta">
           <span class="yoga-tag">${p.difficulty}</span>
           <span class="yoga-tag green">${p.reps}</span>
-          <span class="yoga-tag pink">${p.sets}</span>
+          <span class="yoga-tag pink">${p.tag}</span>
         </div>
         <div style="display:flex;gap:8px">
           <button class="btn btn-p btn-sm" style="flex:1;font-size:12px" onclick="startYogaTimer('${p.id}',${p.duration},event)">▶ Start</button>
-          <button class="btn btn-g btn-sm" style="font-size:12px" onclick="toggleYogaInfo('${p.id}')">ℹ Info</button>
         </div>
       </div>
       <div class="yoga-timer-wrap" id="ytw-${p.id}">
-        <div class="yoga-timer-face" id="ytf-${p.id}">00:${String(p.duration).padStart(2,'0')}</div>
+        <div class="yoga-timer-face" id="ytf-${p.id}">00:${String(Math.floor(p.duration/60)).padStart(2,'0')}:${String(p.duration%60).padStart(2,'0')}</div>
         <div class="yoga-prog"><div class="yoga-pf" id="ypf-${p.id}" style="width:0%"></div></div>
         <div class="yoga-btns">
           <button class="btn btn-t btn-sm" onclick="pauseYogaTimer('${p.id}')">⏸ Pause</button>
-          <button class="btn btn-g btn-sm" onclick="stopYogaTimer('${p.id}',${p.duration})">↺ Reset</button>
+          <button class="btn btn-g btn-sm" onclick="stopYogaTimer('${p.id}',${p.duration})">🔄 Reset</button>
         </div>
       </div>
     `;
