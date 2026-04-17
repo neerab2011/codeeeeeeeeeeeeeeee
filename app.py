@@ -2694,18 +2694,25 @@ def index():
     return Response(HTML, mimetype="text/html")
 
 # ─── LAUNCHER ─────────────────────────────────────────────────────────────────
-def open_browser():
-    time.sleep(1.2)
-    webbrowser.open("http://127.0.0.1:5050")
+def open_browser(port):
+    time.sleep(1.5)
+    webbrowser.open(f"http://127.0.0.1:{port}")
 
 if __name__ == "__main__":
     import sys
     sys.stdout.reconfigure(encoding="utf-8", errors="replace") if hasattr(sys.stdout, "reconfigure") else None
+    
+    port = int(os.environ.get("PORT", 5050))
+    is_render = os.environ.get("RENDER") is not None
+    
     print("\n" + "="*55)
     print("  Zenith - Smart Detox & Digital Wellness")
     print("="*55)
-    print("  -> http://127.0.0.1:5050")
+    print(f"  -> Bound to port {port}")
     print("  Press Ctrl+C to stop\n")
-    t = threading.Thread(target=open_browser, daemon=True)
-    t.start()
-    app.run(host="127.0.0.1", port=5050, debug=False)
+    
+    if not is_render:
+        t = threading.Thread(target=open_browser, args=(port,), daemon=True)
+        t.start()
+        
+    app.run(host="0.0.0.0", port=port, debug=False)
